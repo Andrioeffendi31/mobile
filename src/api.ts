@@ -220,6 +220,27 @@ export type Bootstrap = {
   team: { total: number; present: number; avatars: { id: number; initials: string }[] };
 };
 
+/** One day, with the trail behind it — /api/me/attendance/<date>. */
+export type AttendanceDay = {
+  date: string;
+  status: string;
+  in: string;
+  out: string;
+  location: string | null;
+  note: string | null;
+  selfieKey: string | null;
+  shift: { start: string; end: string };
+  events: {
+    id: number;
+    kind: "masuk" | "keluar" | "catatan" | "lokasi";
+    at: string;
+    location: string | null;
+    note: string | null;
+    photoKey: string | null;
+    distanceM: number | null;
+  }[];
+};
+
 export type AttendanceMonth = {
   month: string;
   stats: { hadir: number; telat: number; cuti: number };
@@ -249,10 +270,14 @@ export type RequestItem = {
   endDate?: string;
   reason?: string;
   delegateId?: number | null;
+  delegateName?: string | null;
+  createdAt?: string;
   attachment?: { key: string; name: string | null; size: number | null } | null;
   /** lembur only */
   minutes?: number;
   date?: string;
+  startTime?: string;
+  endTime?: string;
 };
 
 export type Requests = {

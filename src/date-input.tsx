@@ -19,10 +19,12 @@ function Trigger({
   text,
   icon,
   onPress,
+  disabled,
 }: {
   text: string;
   icon: "calendar" | "clock";
   onPress: () => void;
+  disabled?: boolean;
 }) {
   return (
     <XStack
@@ -33,13 +35,17 @@ function Trigger({
       borderWidth={1}
       borderColor="$lineStrong"
       borderRadius={11}
-      backgroundColor="$surface"
-      pressStyle={{ backgroundColor: "$inset" }}
-      onPress={onPress}
-      accessibilityRole="button"
+      backgroundColor={disabled ? "$inset" : "$surface"}
+      pressStyle={disabled ? undefined : { backgroundColor: "$inset" }}
+      onPress={disabled ? undefined : onPress}
+      accessibilityRole={disabled ? undefined : "button"}
+      accessibilityState={{ disabled }}
     >
-      <Mono fontSize={13}>{text}</Mono>
-      <Feather name={icon} size={15} color={tint("$fgSubtle")} />
+      <Mono fontSize={13} color={disabled ? "$fgMuted" : "$fg"}>
+        {text}
+      </Mono>
+      {/* no picker icon when there is no picker to open — the field is a readout */}
+      {disabled ? null : <Feather name={icon} size={15} color={tint("$fgSubtle")} />}
     </XStack>
   );
 }
@@ -56,15 +62,22 @@ export function DateInput({
   value,
   onChange,
   minimumDate,
+  disabled,
 }: {
   value: string;
   onChange: (iso: string) => void;
   minimumDate?: Date;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Trigger text={value} icon="calendar" onPress={() => setOpen(true)} />
+      <Trigger
+        text={value}
+        icon="calendar"
+        disabled={disabled}
+        onPress={() => setOpen(true)}
+      />
       {open ? (
         <DateTimePicker
           mode="date"
@@ -85,9 +98,11 @@ export function DateInput({
 export function TimeInput({
   value,
   onChange,
+  disabled,
 }: {
   value: string;
   onChange: (time: string) => void;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [h, m] = value.split(":").map(Number);
@@ -96,7 +111,7 @@ export function TimeInput({
 
   return (
     <>
-      <Trigger text={value} icon="clock" onPress={() => setOpen(true)} />
+      <Trigger text={value} icon="clock" disabled={disabled} onPress={() => setOpen(true)} />
       {open ? (
         <DateTimePicker
           mode="time"

@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { RefreshControl } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScrollView, Text, XStack, YStack } from "tamagui";
 import { type AttendanceMonth, get } from "@/api";
+import { AttendanceDetailSheet } from "@/attendance-detail";
 import { bulanLabel, bulanPendek, bulanTerakhir, hariPendek, todayWib } from "@/format";
+import { tint } from "@/theme";
 import {
   AttBadge,
   Card,
@@ -21,6 +24,8 @@ import {
 export default function Kehadiran() {
   const insets = useSafeAreaInsets();
   const [month, setMonth] = useState(todayWib().slice(0, 7));
+  /** the day whose detail sheet is open, by date — the sheet fetches its own */
+  const [day, setDay] = useState<string | null>(null);
   const months = bulanTerakhir(12);
 
   const q = useQuery({
@@ -67,7 +72,17 @@ export default function Kehadiran() {
         ) : (
           <YStack gap={8}>
             {q.data.days.map((d) => (
-              <Card key={d.date} flexDirection="row" alignItems="center" gap={12} paddingHorizontal={13}>
+              <Card
+                key={d.date}
+                flexDirection="row"
+                alignItems="center"
+                gap={12}
+                paddingHorizontal={13}
+                pressStyle={{ backgroundColor: "$surface2" }}
+                onPress={() => setDay(d.date)}
+                accessibilityRole="button"
+                aria-label={`${d.date}, ${d.in} sampai ${d.out}, ${d.status}. Buka detail`}
+              >
                 <YStack
                   width={34}
                   height={34}
@@ -92,11 +107,18 @@ export default function Kehadiran() {
                   </Text>
                 </YStack>
                 <AttBadge status={d.status} />
+                <Feather name="chevron-right" size={15} color={tint("$fgSubtle")} />
               </Card>
             ))}
           </YStack>
         )}
       </ScrollView>
+
+      <AttendanceDetailSheet
+        date={day}
+        open={day !== null}
+        onClose={() => setDay(null)}
+      />
     </Screen>
   );
 }

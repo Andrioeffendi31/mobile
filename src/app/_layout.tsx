@@ -55,7 +55,19 @@ export default function RootLayout() {
     void SystemUI.setBackgroundColorAsync(scheme === "dark" ? dark.bg : light.bg);
   }, [scheme]);
 
+  /**
+   * QueryClientProvider outermost, above TamaguiProvider.
+   *
+   * It used to sit inside <Gate>, wrapping only the <Stack>. That looks equivalent
+   * and is not: a modal <Sheet> does not render its children where they were
+   * written. Tamagui's native portal is not a React portal — it stores the node in
+   * the PortalProvider's state and re-renders it from a <PortalHost> mounted up at
+   * the root, so React context is resolved from *there*. Any hook inside a sheet —
+   * the attachment download, anything added later — looked for a QueryClient
+   * outside the one place that had one, and threw.
+   */
   return (
+    <QueryClientProvider client={queryClient}>
     <TamaguiProvider config={tamaguiConfig} defaultTheme={scheme}>
       <Theme name={scheme}>
         <SafeAreaProvider>
@@ -65,6 +77,7 @@ export default function RootLayout() {
         </SafeAreaProvider>
       </Theme>
     </TamaguiProvider>
+    </QueryClientProvider>
   );
 }
 
@@ -138,11 +151,9 @@ function Gate({
   if (cookie && onLogin) return <Redirect href="/" />;
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="login" />
-        <Stack.Screen name="(tabs)" />
-      </Stack>
-    </QueryClientProvider>
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="login" />
+      <Stack.Screen name="(tabs)" />
+    </Stack>
   );
 }

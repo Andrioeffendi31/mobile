@@ -1,15 +1,13 @@
 import { useEffect, useState } from "react";
 import { RefreshControl } from "react-native";
 import { useLocalSearchParams } from "expo-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Progress, ScrollView, Text, XStack, YStack } from "tamagui";
 import { Feather } from "@expo/vector-icons";
-import * as Linking from "expo-linking";
-import { type RequestItem, type Requests, get, postJson } from "@/api";
+import { type RequestItem, type Requests, get } from "@/api";
 import { tint } from "@/theme";
 import { durasiJam, todayWib } from "@/format";
-import { toast } from "@/toast";
 import {
   Btn,
   Card,
@@ -33,8 +31,12 @@ export default function Pengajuan() {
   const params = useLocalSearchParams<{ open?: string }>();
   const [tab, setTab] = useState<Tab>("cuti");
   const [sheet, setSheet] = useState<Tab | null>(null);
-  /** the request being revised, when the sheet was opened from a card */
-  const [editing, setEditing] = useState<RequestItem | null>(null);
+  /**
+   * The request the form is showing. null with `sheet` set means filing a new one —
+   * the same sheet reads a request, edits it, or starts empty, so there is nothing
+   * else to track.
+   */
+  const [viewing, setViewing] = useState<RequestItem | null>(null);
 
   /**
    * The Beranda quick actions pick the segment, and stop there.
@@ -109,7 +111,7 @@ export default function Pengajuan() {
         <Btn
           marginBottom={16}
           onPress={() => {
-            setEditing(null);
+            setViewing(null);
             setSheet(tab);
           }}
         >
@@ -131,9 +133,9 @@ export default function Pengajuan() {
               <HistoryCard
                 key={`${r.kind}-${r.id}`}
                 item={r}
-                onRevise={() => {
-                  setEditing(r);
-                  setSheet("cuti");
+                onOpen={() => {
+                  setViewing(r);
+                  setSheet(r.kind);
                 }}
               />
             ))}
@@ -143,128 +145,66 @@ export default function Pengajuan() {
 
       <LeaveSheet
         open={sheet === "cuti"}
-        edit={editing}
+        request={viewing}
         onClose={() => {
           setSheet(null);
-          setEditing(null);
+          setViewing(null);
         }}
         delegates={q.data?.delegates ?? []}
         remaining={q.data?.balance?.remaining ?? 0}
       />
-      <OvertimeSheet open={sheet === "lembur"} onClose={() => setSheet(null)} />
+      <OvertimeSheet
+        open={sheet === "lembur"}
+        request={viewing}
+        onClose={() => {
+          setSheet(null);
+          setViewing(null);
+        }}
+      />
     </Screen>
   );
 }
 
-function HistoryCard({
-  item,
-  onRevise,
-}: {
-  item: RequestItem;
-  onRevise: () => void;
-}) {
-  const qc = useQueryClient();
-  const openAttachment = useMutation({
-    mutationFn: async (key: string) => {
-      const { url } = await get<{ url: string }>(`/api/files/${key}?json=1`);
-      await Linking.openURL(url);
-    },
-    onError: (e) => toast((e as Error).message),
-  });
-
-  const cancel = useMutation({
-    mutationFn: () =>
-      postJson("/api/me/requests", { kind: item.kind, id: item.id }, "PATCH"),
-    onSuccess: async () => {
-      await qc.invalidateQueries();
-      toast("Pengajuan dibatalkan");
-    },
-    onError: (e) => toast((e as Error).message),
-  });
-
+/**
+ * A summary that opens the record. Everything actionable moved into the detail
+ * sheet: a list where every row carried its own buttons read as a stack of
+ * controls rather than as history, and the buttons were the widest thing on each
+ * card while the reason for them was three words long.
+ */
+function HistoryCard({ item, onOpen }: { item: RequestItem; onOpen: () => void }) {
   return (
-    <Card paddingHorizontal={14}>
+    <Card
+      paddingHorizontal={14}
+      pressStyle={{ backgroundColor: "$surface2" }}
+      onPress={onOpen}
+      accessibilityRole="button"
+      aria-label={`${item.title}, ${item.detail}, ${item.status}. Buka detail`}
+    >
       <XStack alignItems="center" justifyContent="space-between" gap={10}>
         <Text fontSize={13.5} fontWeight="600" color="$fg" flexShrink={1}>
           {item.title}
         </Text>
         <ReqBadge status={item.status} />
       </XStack>
-      <Mono fontSize={12} color="$fgMuted" marginTop={3}>
-        {item.detail}
-      </Mono>
-      <Text fontSize={11.5} color="$fgSubtle" marginTop={5}>
-        {item.note}
-      </Text>
-      {item.attachment ? (
-        <XStack
-          alignItems="center"
-          gap={8}
-          marginTop={9}
-          paddingHorizontal={11}
-          paddingVertical={9}
-          borderRadius={10}
-          backgroundColor="$inset"
-          pressStyle={{ opacity: 0.7 }}
-          onPress={() => openAttachment.mutate(item.attachment!.key)}
-          accessibilityRole="button"
-          aria-label={`Buka lampiran ${item.attachment.name ?? ""}`}
-        >
-          <Feather name="paperclip" size={13} color={tint("$fgSubtle")} />
-          <Text fontSize={11.5} color="$fgMuted" flex={1} numberOfLines={1}>
-            {item.attachment.name ?? "Lampiran"}
-          </Text>
-          <Feather name="download" size={13} color={tint("$fgSubtle")} />
-        </XStack>
-      ) : null}
 
-      {/**
-       * A revision is the employee's turn, so the note HR wrote is the loudest
-       * thing on the card and the fix is one tap from it. Cancelling stays
-       * available: sometimes the answer to "please revise" is "never mind".
-       */}
-      {item.status === "revisi" ? (
-        <YStack
-          marginTop={10}
-          padding={11}
-          borderRadius={10}
-          backgroundColor="$accentSubtle"
-          gap={9}
-        >
-          <Text fontSize={12} color="$accent" lineHeight={17}>
-            HR meminta revisi{item.note ? `: ${item.note}` : "."}
-          </Text>
-          <XStack gap={8}>
-            <Btn small flex={1} onPress={onRevise}>
-              Perbaiki &amp; kirim ulang
-            </Btn>
-            <Btn
-              small
-              tone="ghost"
-              color="$danger"
-              borderColor="$danger"
-              disabled={cancel.isPending}
-              onPress={() => cancel.mutate()}
-            >
-              {cancel.isPending ? "…" : "Batalkan"}
-            </Btn>
-          </XStack>
-        </YStack>
-      ) : item.status === "menunggu" ? (
-        <Btn
-          small
-          tone="ghost"
-          alignSelf="flex-start"
-          marginTop={10}
-          color="$danger"
-          // ghost's edge is $fgMuted; this one's label is red, so its border is too
-          borderColor="$danger"
-          disabled={cancel.isPending}
-          onPress={() => cancel.mutate()}
-        >
-          {cancel.isPending ? "Membatalkan…" : "Batalkan"}
-        </Btn>
-      ) : null}
+      <XStack alignItems="center" gap={8} marginTop={3}>
+        <Mono fontSize={12} color="$fgMuted" flex={1}>
+          {item.detail}
+        </Mono>
+        {item.attachment ? (
+          <Feather name="paperclip" size={12} color={tint("$fgSubtle")} />
+        ) : null}
+        <Feather name="chevron-right" size={15} color={tint("$fgSubtle")} />
+      </XStack>
+
+      <Text
+        fontSize={11.5}
+        color={item.status === "revisi" ? "$accent" : "$fgSubtle"}
+        marginTop={5}
+        numberOfLines={2}
+      >
+        {item.status === "revisi" && item.note ? `HR: ${item.note}` : item.note}
+      </Text>
     </Card>
   );
 }

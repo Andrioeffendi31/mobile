@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as DocumentPicker from "expo-document-picker";
+import * as Linking from "expo-linking";
 import { Feather } from "@expo/vector-icons";
-import { Text, XStack, YStack, useTheme } from "tamagui";
+import { Text, XStack, YStack } from "tamagui";
 import { tint } from "@/theme";
-import { type RequestItem, postForm, postJson } from "@/api";
+import { type RequestItem, get, postForm, postJson } from "@/api";
 import { DateInput, TimeInput } from "@/date-input";
-import { durasiJam, hariKerjaPreview, menitAntara, plusHari, todayWib } from "@/format";
+import { durasiJam, hariKerjaPreview, menitAntara, plusHari, tanggalPanjang, todayWib } from "@/format";
 import { toast } from "@/toast";
-import { Btn, Field, Note, Readout, SheetShell, TextArea } from "@/ui";
+import { Btn, Field, Note, Readout, ReqBadge, SheetShell, TextArea } from "@/ui";
 
 /**
  * The two request forms (PRD-Mobile §6.3).
@@ -28,50 +29,25 @@ const LEAVE_TYPES = [
 
 type LeaveType = (typeof LEAVE_TYPES)[number]["value"];
 
-/**
- * The sheet's back control. Was a <Btn> holding a bare "✕", which lost twice: a
- * Button applies its own horizontal padding, so a 46px-wide one truncated the
- * glyph to an ellipsis — the "..." in the corner was the ✕ being clipped — and a
- * $fgMuted mark on white is not the contrast a control next to the submit button
- * deserves. A plain pressable, a chevron, and $fg.
- */
-function CloseButton({ onPress }: { onPress: () => void }) {
-  const theme = useTheme();
-
-  return (
-    <XStack
-      width={46}
-      height={46}
-      borderRadius={12}
-      borderWidth={1}
-      borderColor="$fgMuted"
-      alignItems="center"
-      justifyContent="center"
-      flexShrink={0}
-      pressStyle={{ backgroundColor: "$inset" }}
-      onPress={onPress}
-      accessibilityRole="button"
-      aria-label="Kembali"
-    >
-      <Feather name="chevron-left" size={22} color={theme.fg?.val} />
-    </XStack>
-  );
-}
-
 export function LeaveSheet({
   open,
   onClose,
   delegates,
   remaining,
-  edit,
+  request,
 }: {
   open: boolean;
   onClose: () => void;
   delegates: { id: number; name: string }[];
   remaining: number;
-  /** the request HR sent back, when this sheet is reopened to fix one */
-  edit?: RequestItem | null;
+  /** the request this sheet is showing — absent when filing a new one */
+  request?: RequestItem | null;
 }) {
+  const editable = request
+    ? request.status === "menunggu" || request.status === "revisi"
+    : true;
+  /** the values are prefilled in every mode; only `editable` decides if they move */
+  const edit = request && editable ? request : null;
   const qc = useQueryClient();
   const [type, setType] = useState<LeaveType>("Cuti Tahunan");
   const [start, setStart] = useState(plusHari(1));
@@ -86,22 +62,36 @@ export function LeaveSheet({
   // way per opening, so yesterday's draft never resurfaces
   useEffect(() => {
     if (!open) return;
-    setType((edit?.type as LeaveType) ?? "Cuti Tahunan");
-    setStart(edit?.startDate ?? plusHari(1));
-    setEnd(edit?.endDate ?? plusHari(1));
-    setReason(edit?.reason ?? "");
-    setDelegateId(edit?.delegateId ?? null);
+    setType((request?.type as LeaveType) ?? "Cuti Tahunan");
+    setStart(request?.startDate ?? plusHari(1));
+    setEnd(request?.endDate ?? plusHari(1));
+    setReason(request?.reason ?? "");
+    setDelegateId(request?.delegateId ?? null);
     setFile(null);
-    setKeptAttachment(edit?.attachment ?? null);
-  }, [open, edit]);
+    setKeptAttachment(request?.attachment ?? null);
+  }, [open, request]);
 
-  // keep the range coherent while typing rather than rejecting it on submit
+  // keep the range coherent while typing rather than rejecting it on submit —
+  // never while merely looking at a request, whose dates are history
   useEffect(() => {
-    if (end < start) setEnd(start);
-  }, [start, end]);
+    if (editable && end < start) setEnd(start);
+  }, [editable, start, end]);
 
   const days = hariKerjaPreview(start, end);
   const invalid = days < 1 || reason.trim().length < 5;
+
+  /** cancelling lives with the form because the form is where a request is now
+   *  opened from — one place holds every action on a pengajuan */
+  const cancel = useMutation({
+    mutationFn: () =>
+      postJson("/api/me/requests", { kind: "cuti", id: request?.id }, "PATCH"),
+    onSuccess: async () => {
+      await qc.invalidateQueries();
+      onClose();
+      toast("Pengajuan dibatalkan");
+    },
+    onError: (e) => toast((e as Error).message),
+  });
 
   /**
    * Multipart either way, because the form can carry a file — and the server reads
@@ -147,16 +137,73 @@ export function LeaveSheet({
     <SheetShell
       open={open}
       onClose={onClose}
-      title={edit ? "Perbaiki Pengajuan" : "Ajukan Cuti"}
+      title={!request ? "Ajukan Cuti" : editable ? "Perbaiki Pengajuan" : request.title}
+      /**
+       * No back button: the sheet already closes by its handle, by dragging down,
+       * and by tapping the overlay — a fourth way to leave was taking width from
+       * the two things there are to decide.
+       *
+       * A decided request gets "Tutup" instead of a disabled status label; the
+       * badge at the top of the sheet already says what was decided, so the footer
+       * only needs a way out.
+       */
       footer={
-        <>
-          <CloseButton onPress={onClose} />
-          <Btn flex={1} disabled={invalid || submit.isPending} onPress={() => submit.mutate()}>
-            {submit.isPending ? "Mengirim…" : edit ? "Kirim revisi" : "Kirim pengajuan"}
+        editable ? (
+          <>
+            <Btn flex={1} disabled={invalid || submit.isPending} onPress={() => submit.mutate()}>
+              {submit.isPending
+                ? "Mengirim…"
+                : request?.status === "revisi"
+                  ? "Kirim revisi"
+                  : request
+                    ? "Simpan perubahan"
+                    : "Kirim pengajuan"}
+            </Btn>
+            {request ? (
+              <Btn
+                tone="danger"
+                disabled={cancel.isPending}
+                onPress={() => cancel.mutate()}
+                aria-label="Batalkan pengajuan"
+              >
+                {cancel.isPending ? "…" : "Batalkan"}
+              </Btn>
+            ) : null}
+          </>
+        ) : (
+          <Btn flex={1} tone="ghost" onPress={onClose}>
+            Tutup
           </Btn>
-        </>
+        )
       }
     >
+      {request ? (
+        <>
+          <XStack alignItems="center" gap={7} flexWrap="wrap">
+            <ReqBadge status={request.status} />
+            {request.createdAt ? (
+              <Text fontSize={11.5} color="$fgSubtle">
+                diajukan {tanggalPanjang(request.createdAt.slice(0, 10))}
+              </Text>
+            ) : null}
+            <Text fontSize={11.5} color="$fgSubtle">
+              · {request.detail}
+            </Text>
+          </XStack>
+          {request.note ? (
+            <Note
+              text={
+                request.status === "revisi"
+                  ? `HR meminta revisi: ${request.note}`
+                  : request.note
+              }
+              fg={request.status === "revisi" ? "$accent" : "$fgMuted"}
+              bg={request.status === "revisi" ? "$accentSubtle" : "$inset"}
+            />
+          ) : null}
+        </>
+      ) : null}
+
       <Field label="Jenis cuti">
         <YStack gap={7}>
           {LEAVE_TYPES.map((t) => {
@@ -172,9 +219,12 @@ export function LeaveSheet({
                 borderWidth={1}
                 borderColor={on ? "$accent" : "$lineStrong"}
                 backgroundColor={on ? "$accentSubtle" : "$surface"}
-                onPress={() => setType(t.value)}
+                // a decided request shows which type it was, it does not offer the
+                // other two: dimming only the unselected rows keeps the answer legible
+                opacity={editable || on ? 1 : 0.4}
+                onPress={editable ? () => setType(t.value) : undefined}
                 accessibilityRole="radio"
-                accessibilityState={{ selected: on }}
+                accessibilityState={{ selected: on, disabled: !editable }}
               >
                 <YStack
                   width={16}
@@ -201,7 +251,12 @@ export function LeaveSheet({
       <XStack gap={10}>
         <YStack flex={1}>
           <Field label="Mulai">
-            <DateInput value={start} onChange={setStart} minimumDate={new Date()} />
+            <DateInput
+              value={start}
+              onChange={setStart}
+              minimumDate={new Date()}
+              disabled={!editable}
+            />
           </Field>
         </YStack>
         <YStack flex={1}>
@@ -210,6 +265,7 @@ export function LeaveSheet({
               value={end}
               onChange={setEnd}
               minimumDate={new Date(`${start}T00:00:00`)}
+              disabled={!editable}
             />
           </Field>
         </YStack>
@@ -226,6 +282,8 @@ export function LeaveSheet({
           onChangeText={setReason}
           placeholder="Tuliskan alasan pengajuan…"
           multiline
+          readOnly={!editable}
+          backgroundColor={editable ? "$surface" : "$inset"}
         />
       </Field>
 
@@ -233,6 +291,7 @@ export function LeaveSheet({
         <AttachmentPicker
           file={file}
           kept={keptAttachment}
+          editable={editable}
           onPick={setFile}
           onClear={() => {
             setFile(null);
@@ -243,15 +302,26 @@ export function LeaveSheet({
 
       <Field label="Pengganti selama cuti (opsional)">
         <XStack gap={7} flexWrap="wrap">
-          <Pill label="Tidak ada" on={delegateId === null} onPress={() => setDelegateId(null)} />
-          {delegates.map((d) => (
-            <Pill
-              key={d.id}
-              label={d.name}
-              on={delegateId === d.id}
-              onPress={() => setDelegateId(d.id)}
-            />
-          ))}
+          {/* read-only: just the answer, not the alternatives nobody can pick */}
+          {editable ? (
+            <>
+              <Pill
+                label="Tidak ada"
+                on={delegateId === null}
+                onPress={() => setDelegateId(null)}
+              />
+              {delegates.map((d) => (
+                <Pill
+                  key={d.id}
+                  label={d.name}
+                  on={delegateId === d.id}
+                  onPress={() => setDelegateId(d.id)}
+                />
+              ))}
+            </>
+          ) : (
+            <Pill label={request?.delegateName ?? "Tidak ada"} on onPress={() => {}} />
+          )}
         </XStack>
       </Field>
 
@@ -262,20 +332,49 @@ export function LeaveSheet({
   );
 }
 
-export function OvertimeSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+/**
+ * The same three modes as the leave sheet, minus editing: there is no endpoint to
+ * revise overtime, because doing it properly means recounting the weekly cap while
+ * excluding the row being changed — real logic, not a copied form. An open overtime
+ * request is cancelled and refiled, so this reads as either a blank form or a
+ * record.
+ */
+export function OvertimeSheet({
+  open,
+  onClose,
+  request,
+}: {
+  open: boolean;
+  onClose: () => void;
+  request?: RequestItem | null;
+}) {
   const qc = useQueryClient();
   const [date, setDate] = useState(todayWib());
   const [startTime, setStartTime] = useState("17:30");
   const [endTime, setEndTime] = useState("20:30");
   const [reason, setReason] = useState("");
 
+  const viewing = Boolean(request);
+  const openState = request?.status === "menunggu" || request?.status === "revisi";
+
+  const cancel = useMutation({
+    mutationFn: () =>
+      postJson("/api/me/requests", { kind: "lembur", id: request?.id }, "PATCH"),
+    onSuccess: async () => {
+      await qc.invalidateQueries();
+      onClose();
+      toast("Pengajuan dibatalkan");
+    },
+    onError: (e) => toast((e as Error).message),
+  });
+
   useEffect(() => {
     if (!open) return;
-    setDate(todayWib());
-    setStartTime("17:30");
-    setEndTime("20:30");
-    setReason("");
-  }, [open]);
+    setDate(request?.date ?? todayWib());
+    setStartTime(request?.startTime ?? "17:30");
+    setEndTime(request?.endTime ?? "20:30");
+    setReason(request?.reason ?? "");
+  }, [open, request]);
 
   const minutes = menitAntara(startTime, endTime);
   const invalid = minutes < 30 || reason.trim().length < 5;
@@ -300,29 +399,55 @@ export function OvertimeSheet({ open, onClose }: { open: boolean; onClose: () =>
     <SheetShell
       open={open}
       onClose={onClose}
-      title="Ajukan Lembur"
+      title={viewing ? (request!.title ?? "Lembur") : "Ajukan Lembur"}
+      /** same footer rules as the leave sheet — minus a submit, since overtime has
+       *  no edit endpoint to submit to */
       footer={
-        <>
-          <CloseButton onPress={onClose} />
+        !viewing ? (
           <Btn flex={1} disabled={invalid || submit.isPending} onPress={() => submit.mutate()}>
             {submit.isPending ? "Mengirim…" : "Kirim pengajuan"}
           </Btn>
-        </>
+        ) : openState ? (
+          <Btn
+            flex={1}
+            tone="danger"
+            disabled={cancel.isPending}
+            onPress={() => cancel.mutate()}
+          >
+            {cancel.isPending ? "Membatalkan…" : "Batalkan pengajuan"}
+          </Btn>
+        ) : (
+          <Btn flex={1} tone="ghost" onPress={onClose}>
+            Tutup
+          </Btn>
+        )
       }
     >
+      {request ? (
+        <>
+          <XStack alignItems="center" gap={7} flexWrap="wrap">
+            <ReqBadge status={request.status} />
+            <Text fontSize={11.5} color="$fgSubtle">
+              {request.detail}
+            </Text>
+          </XStack>
+          {request.note ? <Note text={request.note} fg="$fgMuted" bg="$inset" /> : null}
+        </>
+      ) : null}
+
       <Field label="Tanggal lembur">
-        <DateInput value={date} onChange={setDate} />
+        <DateInput disabled={viewing} value={date} onChange={setDate} />
       </Field>
 
       <XStack gap={10}>
         <YStack flex={1}>
           <Field label="Jam mulai">
-            <TimeInput value={startTime} onChange={setStartTime} />
+            <TimeInput disabled={viewing} value={startTime} onChange={setStartTime} />
           </Field>
         </YStack>
         <YStack flex={1}>
           <Field label="Jam selesai">
-            <TimeInput value={endTime} onChange={setEndTime} />
+            <TimeInput disabled={viewing} value={endTime} onChange={setEndTime} />
           </Field>
         </YStack>
       </XStack>
@@ -336,14 +461,18 @@ export function OvertimeSheet({ open, onClose }: { open: boolean; onClose: () =>
           onChangeText={setReason}
           placeholder="Contoh: perbaikan bug rilis"
           multiline
+          readOnly={viewing}
+          backgroundColor={viewing ? "$inset" : "$surface"}
         />
       </Field>
 
-      <Note
-        text="Lembur wajib disetujui HR sebelum dijalankan agar dapat dihitung. Batas 14 jam per minggu."
-        fg="$warning"
-        bg="$warningSubtle"
-      />
+      {viewing ? null : (
+        <Note
+          text="Lembur wajib disetujui HR sebelum dijalankan agar dapat dihitung. Batas 14 jam per minggu."
+          fg="$warning"
+          bg="$warningSubtle"
+        />
+      )}
 
       {submit.isError ? (
         <Note text={(submit.error as Error).message} fg="$danger" bg="$dangerSubtle" />
@@ -363,20 +492,64 @@ export function OvertimeSheet({ open, onClose }: { open: boolean; onClose: () =>
 function AttachmentPicker({
   file,
   kept,
+  editable,
   onPick,
   onClear,
 }: {
   file: DocumentPicker.DocumentPickerAsset | null;
   kept: RequestItem["attachment"];
+  editable: boolean;
   onPick: (f: DocumentPicker.DocumentPickerAsset) => void;
   onClear: () => void;
 }) {
+  /** the signed URL, then the browser — the session is a header this app holds,
+   *  not a cookie the browser would send */
+  const download = useMutation({
+    mutationFn: async (key: string) => {
+      const { url } = await get<{ url: string }>(`/api/files/${key}?json=1`);
+      await Linking.openURL(url);
+    },
+    onError: (e) => toast((e as Error).message),
+  });
   const pick = async () => {
     const picked = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
     if (!picked.canceled) onPick(picked.assets[0]);
   };
 
   const name = file?.name ?? kept?.name ?? null;
+
+  // read-only: either the file that was filed, or nothing worth a row
+  if (!editable) {
+    if (!name || !kept) {
+      return (
+        <Text fontSize={12.5} color="$fgSubtle">
+          Tidak ada lampiran
+        </Text>
+      );
+    }
+    return (
+      <XStack
+        alignItems="center"
+        gap={10}
+        paddingHorizontal={12}
+        paddingVertical={11}
+        borderRadius={11}
+        borderWidth={1}
+        borderColor="$lineStrong"
+        pressStyle={{ backgroundColor: "$inset" }}
+        onPress={() => download.mutate(kept.key)}
+        accessibilityRole="button"
+        aria-label={`Unduh lampiran ${name}`}
+      >
+        <Feather name="paperclip" size={15} color={tint("$fgSubtle")} />
+        <Text fontSize={12.5} color="$fg" flex={1} numberOfLines={1}>
+          {name}
+        </Text>
+        <Feather name="download" size={15} color={tint("$fgSubtle")} />
+      </XStack>
+    );
+  }
+
   if (!name) {
     return (
       <XStack
