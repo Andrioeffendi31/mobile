@@ -29,6 +29,16 @@ export const light = {
   warningSubtle: "#fbf0e2",
   danger: "#c0392b",
   dangerSubtle: "#fbeceb",
+  /**
+   * The *filled* destructive button — "Keluar dari akun", "Coba lagi". The
+   * palette's own red, used as a surface rather than as a text hue: it carries a
+   * white label at 5.4:1 and stands 5.0:1 clear of the page, where the
+   * `dangerSubtle` wash it replaced sat at 1.06:1 and read as a panel that
+   * happened to contain red words. A deeper maroon scores higher but stops
+   * reading as red.
+   */
+  dangerFill: "#c0392b",
+  dangerFillFg: "#ffffff",
   info: "#1d6fd6",
   infoSubtle: "#e8f1fd",
 };
@@ -60,6 +70,13 @@ export const dark: typeof light = {
   warningSubtle: "#2a1f0d",
   danger: "#f87171",
   dangerSubtle: "#2b1414",
+  /**
+   * The same red as the light theme, not this theme's lighter `danger`: #f87171
+   * as a surface would take a white label down to 2.8:1. #c0392b is dark enough
+   * for white (5.4:1) and still stands 3.5:1 off the page.
+   */
+  dangerFill: "#c0392b",
+  dangerFillFg: "#ffffff",
   info: "#60a5fa",
   infoSubtle: "#12213a",
 };

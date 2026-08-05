@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ScrollView, Sheet, Text, XStack, YStack } from "tamagui";
-import { postJson } from "@/api";
+import * as DocumentPicker from "expo-document-picker";
+import { Feather } from "@expo/vector-icons";
+import { Text, XStack, YStack, useTheme } from "tamagui";
+import { tint } from "@/theme";
+import { type RequestItem, postForm, postJson } from "@/api";
 import { DateInput, TimeInput } from "@/date-input";
 import { durasiJam, hariKerjaPreview, menitAntara, plusHari, todayWib } from "@/format";
 import { toast } from "@/toast";
-import { Btn, Field, Note, Readout, TextArea } from "@/ui";
+import { Btn, Field, Note, Readout, SheetShell, TextArea } from "@/ui";
 
 /**
  * The two request forms (PRD-Mobile §6.3).
@@ -25,57 +28,33 @@ const LEAVE_TYPES = [
 
 type LeaveType = (typeof LEAVE_TYPES)[number]["value"];
 
-function SheetShell({
-  open,
-  onClose,
-  title,
-  children,
-  footer,
-}: {
-  open: boolean;
-  onClose: () => void;
-  title: string;
-  children: React.ReactNode;
-  footer: React.ReactNode;
-}) {
+/**
+ * The sheet's back control. Was a <Btn> holding a bare "✕", which lost twice: a
+ * Button applies its own horizontal padding, so a 46px-wide one truncated the
+ * glyph to an ellipsis — the "..." in the corner was the ✕ being clipped — and a
+ * $fgMuted mark on white is not the contrast a control next to the submit button
+ * deserves. A plain pressable, a chevron, and $fg.
+ */
+function CloseButton({ onPress }: { onPress: () => void }) {
+  const theme = useTheme();
+
   return (
-    <Sheet
-      modal
-      open={open}
-      onOpenChange={(next: boolean) => !next && onClose()}
-      snapPoints={[88]}
-      dismissOnSnapToBottom
-      transition="medium"
+    <XStack
+      width={46}
+      height={46}
+      borderRadius={12}
+      borderWidth={1}
+      borderColor="$fgMuted"
+      alignItems="center"
+      justifyContent="center"
+      flexShrink={0}
+      pressStyle={{ backgroundColor: "$inset" }}
+      onPress={onPress}
+      accessibilityRole="button"
+      aria-label="Kembali"
     >
-      <Sheet.Overlay backgroundColor="rgba(20,22,27,.42)" />
-      <Sheet.Handle />
-      <Sheet.Frame
-        backgroundColor="$surface"
-        borderTopLeftRadius={22}
-        borderTopRightRadius={22}
-        paddingTop={12}
-      >
-        <Text fontSize={18} fontWeight="700" color="$fg" paddingHorizontal={22}>
-          {title}
-        </Text>
-        <ScrollView
-          contentContainerStyle={{ padding: 22, gap: 13 }}
-          keyboardShouldPersistTaps="handled"
-        >
-          {children}
-        </ScrollView>
-        <XStack
-          gap={10}
-          paddingHorizontal={22}
-          paddingTop={14}
-          paddingBottom={26}
-          borderTopWidth={1}
-          borderTopColor="$line"
-        >
-          {footer}
-        </XStack>
-      </Sheet.Frame>
-    </Sheet>
+      <Feather name="chevron-left" size={22} color={theme.fg?.val} />
+    </XStack>
   );
 }
 
@@ -84,11 +63,14 @@ export function LeaveSheet({
   onClose,
   delegates,
   remaining,
+  edit,
 }: {
   open: boolean;
   onClose: () => void;
   delegates: { id: number; name: string }[];
   remaining: number;
+  /** the request HR sent back, when this sheet is reopened to fix one */
+  edit?: RequestItem | null;
 }) {
   const qc = useQueryClient();
   const [type, setType] = useState<LeaveType>("Cuti Tahunan");
@@ -96,15 +78,22 @@ export function LeaveSheet({
   const [end, setEnd] = useState(plusHari(1));
   const [reason, setReason] = useState("");
   const [delegateId, setDelegateId] = useState<number | null>(null);
+  const [file, setFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
+  /** the attachment already on the server: kept, replaced, or explicitly dropped */
+  const [keptAttachment, setKeptAttachment] = useState<RequestItem["attachment"]>(null);
 
+  // prefilled from the request being revised, or reset to a blank form — either
+  // way per opening, so yesterday's draft never resurfaces
   useEffect(() => {
     if (!open) return;
-    setType("Cuti Tahunan");
-    setStart(plusHari(1));
-    setEnd(plusHari(1));
-    setReason("");
-    setDelegateId(null);
-  }, [open]);
+    setType((edit?.type as LeaveType) ?? "Cuti Tahunan");
+    setStart(edit?.startDate ?? plusHari(1));
+    setEnd(edit?.endDate ?? plusHari(1));
+    setReason(edit?.reason ?? "");
+    setDelegateId(edit?.delegateId ?? null);
+    setFile(null);
+    setKeptAttachment(edit?.attachment ?? null);
+  }, [open, edit]);
 
   // keep the range coherent while typing rather than rejecting it on submit
   useEffect(() => {
@@ -114,20 +103,43 @@ export function LeaveSheet({
   const days = hariKerjaPreview(start, end);
   const invalid = days < 1 || reason.trim().length < 5;
 
+  /**
+   * Multipart either way, because the form can carry a file — and the server reads
+   * JSON or multipart from the same schema, so there is no second shape to keep in
+   * sync. PUT resubmits a revision, POST files a new request.
+   */
   const submit = useMutation({
-    mutationFn: () =>
-      postJson<{ days: number }>("/api/me/requests", {
-        kind: "cuti",
-        type,
-        startDate: start,
-        endDate: end,
-        reason: reason.trim(),
-        ...(delegateId ? { delegateId } : {}),
-      }),
+    mutationFn: () => {
+      const form = new FormData();
+      form.append("kind", "cuti");
+      form.append("type", type);
+      form.append("startDate", start);
+      form.append("endDate", end);
+      form.append("reason", reason.trim());
+      if (delegateId) form.append("delegateId", String(delegateId));
+      if (file) {
+        form.append("attachment", {
+          uri: file.uri,
+          name: file.name,
+          type: file.mimeType ?? "application/octet-stream",
+        } as unknown as Blob);
+      }
+      if (!edit) return postForm<{ days: number }>("/api/me/requests", form);
+
+      form.append("id", String(edit.id));
+      // the server keeps the existing file unless told otherwise, so removal has
+      // to be stated rather than inferred from an absent part
+      if (!file && !keptAttachment) form.append("removeAttachment", "1");
+      return postForm<{ days: number }>("/api/me/requests", form, "PUT");
+    },
     onSuccess: async (res) => {
       await qc.invalidateQueries();
       onClose();
-      toast(`Pengajuan cuti ${res.days} hari kerja terkirim`);
+      toast(
+        edit
+          ? `Revisi terkirim · ${res.days} hari kerja`
+          : `Pengajuan cuti ${res.days} hari kerja terkirim`,
+      );
     },
   });
 
@@ -135,14 +147,12 @@ export function LeaveSheet({
     <SheetShell
       open={open}
       onClose={onClose}
-      title="Ajukan Cuti"
+      title={edit ? "Perbaiki Pengajuan" : "Ajukan Cuti"}
       footer={
         <>
-          <Btn tone="ghost" width={46} onPress={onClose}>
-            ✕
-          </Btn>
+          <CloseButton onPress={onClose} />
           <Btn flex={1} disabled={invalid || submit.isPending} onPress={() => submit.mutate()}>
-            {submit.isPending ? "Mengirim…" : "Kirim pengajuan"}
+            {submit.isPending ? "Mengirim…" : edit ? "Kirim revisi" : "Kirim pengajuan"}
           </Btn>
         </>
       }
@@ -219,6 +229,18 @@ export function LeaveSheet({
         />
       </Field>
 
+      <Field label="Lampiran (opsional)">
+        <AttachmentPicker
+          file={file}
+          kept={keptAttachment}
+          onPick={setFile}
+          onClear={() => {
+            setFile(null);
+            setKeptAttachment(null);
+          }}
+        />
+      </Field>
+
       <Field label="Pengganti selama cuti (opsional)">
         <XStack gap={7} flexWrap="wrap">
           <Pill label="Tidak ada" on={delegateId === null} onPress={() => setDelegateId(null)} />
@@ -281,9 +303,7 @@ export function OvertimeSheet({ open, onClose }: { open: boolean; onClose: () =>
       title="Ajukan Lembur"
       footer={
         <>
-          <Btn tone="ghost" width={46} onPress={onClose}>
-            ✕
-          </Btn>
+          <CloseButton onPress={onClose} />
           <Btn flex={1} disabled={invalid || submit.isPending} onPress={() => submit.mutate()}>
             {submit.isPending ? "Mengirim…" : "Kirim pengajuan"}
           </Btn>
@@ -332,6 +352,103 @@ export function OvertimeSheet({ open, onClose }: { open: boolean; onClose: () =>
   );
 }
 
+/**
+ * One optional file per leave request — a doctor's note, an invitation, a visa
+ * letter. Three states in one row: nothing picked, a file already on the server
+ * from the original submission, and a new file chosen to replace it.
+ *
+ * Kept to a single file because that is what every one of these processes needs;
+ * the server stores it in three columns for the same reason.
+ */
+function AttachmentPicker({
+  file,
+  kept,
+  onPick,
+  onClear,
+}: {
+  file: DocumentPicker.DocumentPickerAsset | null;
+  kept: RequestItem["attachment"];
+  onPick: (f: DocumentPicker.DocumentPickerAsset) => void;
+  onClear: () => void;
+}) {
+  const pick = async () => {
+    const picked = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
+    if (!picked.canceled) onPick(picked.assets[0]);
+  };
+
+  const name = file?.name ?? kept?.name ?? null;
+  if (!name) {
+    return (
+      <XStack
+        height={44}
+        alignItems="center"
+        justifyContent="center"
+        gap={8}
+        borderRadius={11}
+        borderWidth={1}
+        borderColor="$fgMuted"
+        borderStyle="dashed"
+        pressStyle={{ backgroundColor: "$inset" }}
+        onPress={pick}
+        accessibilityRole="button"
+        aria-label="Pilih lampiran"
+      >
+        <Feather name="paperclip" size={15} color={tint("$fgSubtle")} />
+        <Text fontSize={13} color="$fgMuted">
+          Pilih berkas
+        </Text>
+      </XStack>
+    );
+  }
+
+  return (
+    <XStack
+      alignItems="center"
+      gap={10}
+      paddingHorizontal={12}
+      paddingVertical={10}
+      borderRadius={11}
+      borderWidth={1}
+      borderColor="$accentLine"
+      backgroundColor="$accentSubtle"
+    >
+      <Feather name="paperclip" size={15} color={tint("$accent")} />
+      <YStack flex={1}>
+        <Text fontSize={12.5} fontWeight="500" color="$fg" numberOfLines={1}>
+          {name}
+        </Text>
+        <Text fontSize={11} color="$fgSubtle">
+          {file ? "Berkas baru" : "Terlampir sebelumnya"} · ketuk ikon untuk ganti
+        </Text>
+      </YStack>
+      <XStack
+        width={30}
+        height={30}
+        alignItems="center"
+        justifyContent="center"
+        pressStyle={{ opacity: 0.5 }}
+        onPress={pick}
+        accessibilityRole="button"
+        aria-label="Ganti lampiran"
+      >
+        <Feather name="refresh-cw" size={14} color={tint("$fgSubtle")} />
+      </XStack>
+      <XStack
+        width={30}
+        height={30}
+        alignItems="center"
+        justifyContent="center"
+        pressStyle={{ opacity: 0.5 }}
+        onPress={onClear}
+        accessibilityRole="button"
+        aria-label="Hapus lampiran"
+      >
+        <Feather name="x" size={15} color={tint("$danger")} />
+      </XStack>
+    </XStack>
+  );
+}
+
 function Pill({
   label,
   on,
@@ -348,7 +465,8 @@ function Pill({
       borderRadius={20}
       borderWidth={1}
       alignItems="center"
-      borderColor={on ? "$accent" : "$lineStrong"}
+      // same edge as the team filter Chip — $lineStrong was 1.43:1 on white
+      borderColor={on ? "$accent" : "$fgSubtle"}
       backgroundColor={on ? "$accentSubtle" : "$surface"}
       onPress={onPress}
       accessibilityRole="radio"

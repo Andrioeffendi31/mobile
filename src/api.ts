@@ -107,8 +107,54 @@ export const postJson = <T>(path: string, body: unknown, method = "POST") =>
     body: JSON.stringify(body),
   });
 
-export const postForm = <T>(path: string, form: FormData) =>
-  request<T>(path, { method: "POST", body: form });
+/**
+ * Multipart upload — over XMLHttpRequest, not fetch.
+ *
+ * Expo SDK 54+ replaces global `fetch` with its WinterCG implementation, and that
+ * one only accepts a string, a Blob, or something with `bytes()` as a form part.
+ * The React Native `{uri, name, type}` part that a picker hands back throws
+ * "Unsupported FormDataPart implementation" (expo/src/winter/fetch/convertFormData.ts).
+ *
+ * XHR is untouched by that swap — Expo only *patches* RN's FormData, whose
+ * `append` still documents the uri form — and it is the better transport anyway:
+ * the native layer streams the file straight from disk, where a Blob would have to
+ * materialise a 4 MB PDF inside the JS heap first.
+ *
+ * Kept behaviourally identical to request(): same cookie, same 401 handling, same
+ * ApiError shape, so callers cannot tell which transport ran.
+ */
+export function postForm<T>(path: string, form: FormData, method = "POST"): Promise<T> {
+  const { cookie } = useSession.getState();
+
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, `${API}${path}`);
+    if (cookie) xhr.setRequestHeader("cookie", cookie);
+    // no content-type header on purpose: XHR derives it from the FormData, and
+    // setting it by hand loses the multipart boundary
+
+    xhr.onload = () => {
+      const text = xhr.responseText;
+      const data = text ? (JSON.parse(text) as T & { error?: string }) : ({} as T);
+
+      if (xhr.status === 401) {
+        void useSession.getState().set(null);
+        reject(new ApiError("Sesi berakhir, silakan masuk lagi", 401));
+        return;
+      }
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new ApiError((data as { error?: string }).error ?? "Gagal mengunggah", xhr.status));
+        return;
+      }
+      resolve(data as T);
+    };
+
+    xhr.onerror = () => reject(new ApiError("Gagal mengunggah, periksa koneksi", 0));
+    xhr.ontimeout = () => reject(new ApiError("Unggahan terlalu lama, coba lagi", 0));
+
+    xhr.send(form);
+  });
+}
 
 /**
  * Email + password against the same NextAuth credentials provider the web login
@@ -193,9 +239,17 @@ export type RequestItem = {
   title: string;
   detail: string;
   note: string;
-  status: "menunggu" | "disetujui" | "ditolak" | "dibatalkan";
+  /** `revisi` = sent back by HR, editable by the employee until resubmitted */
+  status: "menunggu" | "revisi" | "disetujui" | "ditolak" | "dibatalkan";
   /** cuti only */
   days?: number;
+  /** the raw fields, so a revision reopens in the form that created it */
+  type?: "Cuti Tahunan" | "Cuti Sakit" | "Izin Khusus";
+  startDate?: string;
+  endDate?: string;
+  reason?: string;
+  delegateId?: number | null;
+  attachment?: { key: string; name: string | null; size: number | null } | null;
   /** lembur only */
   minutes?: number;
   date?: string;

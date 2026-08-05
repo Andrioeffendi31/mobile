@@ -24,6 +24,8 @@ export const ATT = {
 
 export const REQ = {
   menunggu: { label: "Menunggu", fg: "$warning", bg: "$warningSubtle" },
+  /** accent, not warning: "menunggu" is HR's turn and this one is yours */
+  revisi: { label: "Perlu revisi", fg: "$accent", bg: "$accentSubtle" },
   disetujui: { label: "Disetujui", fg: "$success", bg: "$successSubtle" },
   ditolak: { label: "Ditolak", fg: "$danger", bg: "$dangerSubtle" },
   dibatalkan: { label: "Dibatalkan", fg: "$fgMuted", bg: "$inset" },

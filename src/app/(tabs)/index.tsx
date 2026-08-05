@@ -7,23 +7,32 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "@tamagui/linear-gradient";
 import { ScrollView, Text, XStack, YStack } from "tamagui";
 import { type Bootstrap, get, logout } from "@/api";
+import { Pengumuman } from "@/announcements";
 import {
   canPingInBackground,
   startBackgroundPing,
   stopBackgroundPing,
 } from "@/background-ping";
-import { ClockSheet } from "@/clock-sheet";
 import { durasiJam, jamWib, sapaan, tanggalPanjang } from "@/format";
-import { HEADER_GRADIENT, cat, tint } from "@/theme";
+import { HEADER_GRADIENT, tint } from "@/theme";
 import { unregisterFromPush } from "@/push";
 import { toast } from "@/toast";
-import { Avatar, Btn, Card, ErrorNote, Loading, Mono, Note, Screen, SectionLabel } from "@/ui";
+import {
+  Avatar,
+  Btn,
+  Card,
+  ErrorNote,
+  Mono,
+  Screen,
+  SectionLabel,
+  Skeleton,
+  SkeletonRows,
+} from "@/ui";
 
 export default function Beranda() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const qc = useQueryClient();
-  const [sheet, setSheet] = useState(false);
   const [clock, setClock] = useState(jamWib(true));
 
   const me = useQuery({ queryKey: ["me"], queryFn: () => get<Bootstrap>("/api/me") });
@@ -64,13 +73,7 @@ export default function Beranda() {
     };
   }, [clockedIn]);
 
-  if (me.isPending) {
-    return (
-      <Screen>
-        <Loading />
-      </Screen>
-    );
-  }
+  if (me.isPending) return <BerandaSkeleton />;
   if (me.isError || !data) {
     return (
       <Screen paddingHorizontal={18} paddingTop={insets.top + 40}>
@@ -110,14 +113,22 @@ export default function Beranda() {
     { label: "Ajukan cuti", icon: "calendar", tint: "$accent", bg: "$accentSubtle", to: "/pengajuan?open=cuti" },
     { label: "Ajukan lembur", icon: "clock", tint: "$warning", bg: "$warningSubtle", to: "/pengajuan?open=lembur" },
     { label: "Riwayat absen", icon: "check-circle", tint: "$success", bg: "$successSubtle", to: "/kehadiran" },
-    { label: "Berkas saya", icon: "folder", tint: "$info", bg: "$infoSubtle", to: "/info?tab=berkas" },
+    { label: "Berkas saya", icon: "folder", tint: "$info", bg: "$infoSubtle", to: "/berkas" },
   ] as const;
 
   return (
     <Screen>
       <ScrollView
         refreshControl={
-          <RefreshControl refreshing={me.isFetching} onRefresh={() => me.refetch()} />
+          <RefreshControl
+            refreshing={me.isFetching}
+            // the feed at the foot of this screen owns its own query, so one pull
+            // has to reach both
+            onRefresh={() => {
+              void me.refetch();
+              void qc.invalidateQueries({ queryKey: ["announcements"] });
+            }}
+          />
         }
         contentContainerStyle={{ paddingBottom: 28 }}
       >
@@ -143,12 +154,18 @@ export default function Beranda() {
                 {data.profile.nik} · {data.profile.division}
               </Mono>
             </YStack>
+            {/* the mockup's shortcut into Pengaturan — the avatar is where a
+                phone user reaches for their own account */}
             <Avatar
               seed={data.profile.id}
               initials={data.profile.initials}
               size={44}
               borderWidth={2}
               borderColor="rgba(255,255,255,.3)"
+              onPress={() => router.push("/pengaturan")}
+              pressStyle={{ opacity: 0.8 }}
+              accessibilityRole="button"
+              aria-label="Buka pengaturan"
             />
           </XStack>
 
@@ -195,7 +212,7 @@ export default function Beranda() {
                 width="100%"
                 height={48}
                 tone={clockedIn ? "danger" : undefined}
-                onPress={() => setSheet(true)}
+                onPress={() => router.push("/absen")}
               >
                 {clockedIn ? "Absen keluar" : "Absen masuk sekarang"}
               </Btn>
@@ -240,57 +257,6 @@ export default function Beranda() {
 
           <YStack gap={10}>
             <XStack alignItems="center" justifyContent="space-between">
-              <SectionLabel>Pengumuman terbaru</SectionLabel>
-              <Text
-                fontSize={12}
-                fontWeight="600"
-                color="$accent"
-                onPress={() => router.push("/info")}
-              >
-                Semua
-              </Text>
-            </XStack>
-            {data.announcements.length === 0 ? (
-              <Note text="Belum ada pengumuman." fg="$fgMuted" bg="$inset" />
-            ) : (
-              data.announcements.map((a) => {
-                const tone = cat(a.category);
-                return (
-                  <Card
-                    key={a.id}
-                    flexDirection="row"
-                    gap={11}
-                    alignItems="flex-start"
-                    paddingHorizontal={14}
-                    onPress={() => router.push("/info")}
-                    pressStyle={{ backgroundColor: "$surface2" }}
-                  >
-                    <YStack
-                      width={32}
-                      height={32}
-                      borderRadius={10}
-                      backgroundColor={tone.bg}
-                      alignItems="center"
-                      justifyContent="center"
-                    >
-                      <Feather name="volume-2" size={15} color={tint(tone.fg)} />
-                    </YStack>
-                    <YStack flex={1}>
-                      <Text fontSize={13} fontWeight="600" color="$fg">
-                        {a.title}
-                      </Text>
-                      <Text fontSize={11.5} color="$fgSubtle" marginTop={2}>
-                        {a.date} · {a.category}
-                      </Text>
-                    </YStack>
-                  </Card>
-                );
-              })
-            )}
-          </YStack>
-
-          <YStack gap={10}>
-            <XStack alignItems="center" justifyContent="space-between">
               <SectionLabel>Rekan hadir hari ini</SectionLabel>
               <Text
                 fontSize={12}
@@ -320,15 +286,81 @@ export default function Beranda() {
               </Text>
             </Card>
           </YStack>
+
+          <Pengumuman />
         </YStack>
       </ScrollView>
+    </Screen>
+  );
+}
 
-      <ClockSheet
-        open={sheet}
-        onClose={() => setSheet(false)}
-        me={data}
-        onDone={toast}
-      />
+/**
+ * The Beranda while /api/me is in flight. The gradient header and the card
+ * geometry are static, so they are drawn for real and only the values are
+ * skeletons — the screen that appears at launch is then the screen that stays,
+ * with the numbers filling in rather than the whole layout replacing a spinner.
+ *
+ * Blocks on the header use a translucent white instead of a theme token: $inset
+ * over indigo would be a light-grey patch.
+ */
+function BerandaSkeleton() {
+  const insets = useSafeAreaInsets();
+  const onHeader = "rgba(255,255,255,.28)";
+
+  return (
+    <Screen>
+      <LinearGradient
+        colors={[...HEADER_GRADIENT]}
+        start={[0, 0]}
+        end={[0.6, 1]}
+        paddingTop={insets.top + 10}
+        paddingHorizontal={22}
+        paddingBottom={58}
+      >
+        <XStack alignItems="center" justifyContent="space-between" paddingBottom={18}>
+          <YStack gap={7} flex={1}>
+            <Skeleton width="34%" height={10} color={onHeader} />
+            <Skeleton width="58%" height={15} color={onHeader} />
+            <Skeleton width="46%" height={9} color={onHeader} />
+          </YStack>
+          <Skeleton width={44} height={44} radius={22} color={onHeader} />
+        </XStack>
+        <XStack gap={9}>
+          {[0, 1, 2].map((i) => (
+            <YStack
+              key={i}
+              flex={1}
+              backgroundColor="rgba(255,255,255,.14)"
+              borderRadius={12}
+              padding={10}
+              gap={7}
+            >
+              <Skeleton width="62%" height={9} color={onHeader} />
+              <Skeleton width="80%" height={12} color={onHeader} />
+            </YStack>
+          ))}
+        </XStack>
+      </LinearGradient>
+
+      <YStack paddingHorizontal={18} marginTop={-40} gap={16}>
+        <Card padding={19} alignItems="center" gap={11} elevation={8}>
+          <Skeleton width="66%" height={9} />
+          <Skeleton width="44%" height={30} radius={9} />
+          <Skeleton width="52%" height={9} />
+          <Skeleton height={48} radius={12} />
+        </Card>
+
+        <XStack gap={9}>
+          {[0, 1, 2, 3].map((i) => (
+            <Card key={i} flex={1} paddingVertical={13} alignItems="center" gap={8}>
+              <Skeleton width={34} height={34} radius={11} />
+              <Skeleton width="72%" height={8} />
+            </Card>
+          ))}
+        </XStack>
+
+        <SkeletonRows count={1} lead={28} trail={false} />
+      </YStack>
     </Screen>
   );
 }

@@ -15,8 +15,8 @@ import {
   Empty,
   ErrorNote,
   Input,
-  Loading,
   Screen,
+  SkeletonRows,
   Title,
 } from "@/ui";
 
@@ -106,7 +106,7 @@ export default function Tim() {
         </ScrollView>
 
         {q.isPending ? (
-          <Loading />
+          <SkeletonRows count={5} />
         ) : q.isError ? (
           <ErrorNote message={(q.error as Error).message} onRetry={q.refetch} />
         ) : visible.length === 0 ? (

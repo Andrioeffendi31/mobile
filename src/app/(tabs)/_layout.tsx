@@ -5,7 +5,8 @@ import { Tabs, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { YStack, useTheme } from "tamagui";
 import { type Bootstrap, get } from "@/api";
-import { registerForPush } from "@/push";
+import { usePrefs } from "@/prefs";
+import { registerForPush, usePushStatus } from "@/push";
 import { Toast } from "@/toast";
 
 /**
@@ -23,12 +24,19 @@ export default function TabLayout() {
 
   // registered here rather than on the login screen: this layout is the first
   // thing that only ever renders for a signed-in employee, and it also covers the
-  // launch where the session was restored from the keychain without a login
+  // launch where the session was restored from the keychain without a login.
+  // Skipped when the employee turned pemberitahuan off in /pengaturan — asking
+  // for the permission again every launch is how that switch becomes a lie.
+  const wantsPush = usePrefs((s) => s.push);
   useEffect(() => {
+    if (!wantsPush) {
+      usePushStatus.setState({ reason: "Dinonaktifkan di Pengaturan" });
+      return;
+    }
     registerForPush().then((r) => {
       if (!r.ok) console.info("[push] tidak aktif:", r.reason);
     });
-  }, []);
+  }, [wantsPush]);
 
   /** Tapping a notification opens the screen it is about (PRD-Mobile §6.6). */
   const tapped = Notifications.useLastNotificationResponse();
@@ -82,12 +90,18 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="info"
+        name="pengaturan"
         options={{
-          title: "Info",
-          tabBarIcon: ({ color }) => <Feather name="volume-2" size={21} color={color} />,
+          title: "Pengaturan",
+          tabBarIcon: ({ color }) => <Feather name="settings" size={21} color={color} />,
         }}
       />
+      {/* Pushed screens. `href: null` keeps them inside this navigator — so the
+          tab bar stays put and back returns to the tab that opened them — without
+          giving any of them a button of its own. */}
+      <Tabs.Screen name="absen" options={{ href: null }} />
+      <Tabs.Screen name="berkas" options={{ href: null }} />
+      <Tabs.Screen name="tentang" options={{ href: null }} />
     </Tabs>
       {/* above the tab bar, outside <Tabs> so it survives a tab switch */}
       <Toast />

@@ -4,7 +4,10 @@ import { useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Progress, ScrollView, Text, XStack, YStack } from "tamagui";
+import { Feather } from "@expo/vector-icons";
+import * as Linking from "expo-linking";
 import { type RequestItem, type Requests, get, postJson } from "@/api";
+import { tint } from "@/theme";
 import { durasiJam, todayWib } from "@/format";
 import { toast } from "@/toast";
 import {
@@ -12,12 +15,12 @@ import {
   Card,
   Empty,
   ErrorNote,
-  Loading,
   Mono,
   ReqBadge,
   Screen,
   SectionLabel,
   Segmented,
+  SkeletonRows,
   Title,
 } from "@/ui";
 import { LeaveSheet, OvertimeSheet } from "@/request-sheets";
@@ -30,13 +33,19 @@ export default function Pengajuan() {
   const params = useLocalSearchParams<{ open?: string }>();
   const [tab, setTab] = useState<Tab>("cuti");
   const [sheet, setSheet] = useState<Tab | null>(null);
+  /** the request being revised, when the sheet was opened from a card */
+  const [editing, setEditing] = useState<RequestItem | null>(null);
 
-  // the Beranda quick actions deep-link straight into a form
+  /**
+   * The Beranda quick actions pick the segment, and stop there.
+   *
+   * They used to open the form sheet as well, but `open` stays in the route after
+   * the sheet is dismissed — so every later visit to this tab reopened it, and a
+   * form appeared over a list somebody meant to read. Landing on the right segment
+   * with "Ajukan cuti" one tap away is the same shortcut without the ambush.
+   */
   useEffect(() => {
-    if (params.open === "cuti" || params.open === "lembur") {
-      setTab(params.open);
-      setSheet(params.open);
-    }
+    if (params.open === "cuti" || params.open === "lembur") setTab(params.open);
   }, [params.open]);
 
   const q = useQuery({ queryKey: ["requests"], queryFn: () => get<Requests>("/api/me/requests") });
@@ -97,14 +106,21 @@ export default function Pengajuan() {
           </Card>
         )}
 
-        <Btn marginBottom={16} onPress={() => setSheet(tab)}>
+        <Btn
+          marginBottom={16}
+          onPress={() => {
+            setEditing(null);
+            setSheet(tab);
+          }}
+        >
           {tab === "cuti" ? "Ajukan cuti" : "Ajukan lembur"}
         </Btn>
 
         <SectionLabel marginBottom={10}>Riwayat pengajuan</SectionLabel>
 
         {q.isPending ? (
-          <Loading />
+          // history cards have no leading tile
+          <SkeletonRows count={3} lead={0} />
         ) : q.isError ? (
           <ErrorNote message={(q.error as Error).message} onRetry={q.refetch} />
         ) : !items?.length ? (
@@ -112,7 +128,14 @@ export default function Pengajuan() {
         ) : (
           <YStack gap={9}>
             {items.map((r) => (
-              <HistoryCard key={`${r.kind}-${r.id}`} item={r} />
+              <HistoryCard
+                key={`${r.kind}-${r.id}`}
+                item={r}
+                onRevise={() => {
+                  setEditing(r);
+                  setSheet("cuti");
+                }}
+              />
             ))}
           </YStack>
         )}
@@ -120,7 +143,11 @@ export default function Pengajuan() {
 
       <LeaveSheet
         open={sheet === "cuti"}
-        onClose={() => setSheet(null)}
+        edit={editing}
+        onClose={() => {
+          setSheet(null);
+          setEditing(null);
+        }}
         delegates={q.data?.delegates ?? []}
         remaining={q.data?.balance?.remaining ?? 0}
       />
@@ -129,8 +156,22 @@ export default function Pengajuan() {
   );
 }
 
-function HistoryCard({ item }: { item: RequestItem }) {
+function HistoryCard({
+  item,
+  onRevise,
+}: {
+  item: RequestItem;
+  onRevise: () => void;
+}) {
   const qc = useQueryClient();
+  const openAttachment = useMutation({
+    mutationFn: async (key: string) => {
+      const { url } = await get<{ url: string }>(`/api/files/${key}?json=1`);
+      await Linking.openURL(url);
+    },
+    onError: (e) => toast((e as Error).message),
+  });
+
   const cancel = useMutation({
     mutationFn: () =>
       postJson("/api/me/requests", { kind: item.kind, id: item.id }, "PATCH"),
@@ -155,13 +196,69 @@ function HistoryCard({ item }: { item: RequestItem }) {
       <Text fontSize={11.5} color="$fgSubtle" marginTop={5}>
         {item.note}
       </Text>
-      {item.status === "menunggu" ? (
+      {item.attachment ? (
+        <XStack
+          alignItems="center"
+          gap={8}
+          marginTop={9}
+          paddingHorizontal={11}
+          paddingVertical={9}
+          borderRadius={10}
+          backgroundColor="$inset"
+          pressStyle={{ opacity: 0.7 }}
+          onPress={() => openAttachment.mutate(item.attachment!.key)}
+          accessibilityRole="button"
+          aria-label={`Buka lampiran ${item.attachment.name ?? ""}`}
+        >
+          <Feather name="paperclip" size={13} color={tint("$fgSubtle")} />
+          <Text fontSize={11.5} color="$fgMuted" flex={1} numberOfLines={1}>
+            {item.attachment.name ?? "Lampiran"}
+          </Text>
+          <Feather name="download" size={13} color={tint("$fgSubtle")} />
+        </XStack>
+      ) : null}
+
+      {/**
+       * A revision is the employee's turn, so the note HR wrote is the loudest
+       * thing on the card and the fix is one tap from it. Cancelling stays
+       * available: sometimes the answer to "please revise" is "never mind".
+       */}
+      {item.status === "revisi" ? (
+        <YStack
+          marginTop={10}
+          padding={11}
+          borderRadius={10}
+          backgroundColor="$accentSubtle"
+          gap={9}
+        >
+          <Text fontSize={12} color="$accent" lineHeight={17}>
+            HR meminta revisi{item.note ? `: ${item.note}` : "."}
+          </Text>
+          <XStack gap={8}>
+            <Btn small flex={1} onPress={onRevise}>
+              Perbaiki &amp; kirim ulang
+            </Btn>
+            <Btn
+              small
+              tone="ghost"
+              color="$danger"
+              borderColor="$danger"
+              disabled={cancel.isPending}
+              onPress={() => cancel.mutate()}
+            >
+              {cancel.isPending ? "…" : "Batalkan"}
+            </Btn>
+          </XStack>
+        </YStack>
+      ) : item.status === "menunggu" ? (
         <Btn
           small
           tone="ghost"
           alignSelf="flex-start"
           marginTop={10}
           color="$danger"
+          // ghost's edge is $fgMuted; this one's label is red, so its border is too
+          borderColor="$danger"
           disabled={cancel.isPending}
           onPress={() => cancel.mutate()}
         >

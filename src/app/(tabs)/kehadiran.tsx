@@ -11,9 +11,9 @@ import {
   Chip,
   Empty,
   ErrorNote,
-  Loading,
   Mono,
   Screen,
+  SkeletonRows,
   Title,
 } from "@/ui";
 
@@ -59,7 +59,7 @@ export default function Kehadiran() {
         </YStack>
 
         {q.isPending ? (
-          <Loading />
+          <SkeletonRows count={5} />
         ) : q.isError ? (
           <ErrorNote message={(q.error as Error).message} onRetry={q.refetch} />
         ) : q.data.days.length === 0 ? (

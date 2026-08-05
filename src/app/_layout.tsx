@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useColorScheme } from "react-native";
 import { Redirect, Stack, usePathname } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import * as SystemUI from "expo-system-ui";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TamaguiProvider, Theme, YStack } from "tamagui";
@@ -15,8 +16,7 @@ import "@/background-ping";
 import "@tamagui/native/setup-expo-linear-gradient";
 import { useSession } from "@/api";
 import { usePrefs } from "@/prefs";
-import { Loading } from "@/ui";
-import { tamaguiConfig } from "../../tamagui.config";
+import { dark, light, tamaguiConfig } from "../../tamagui.config";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -45,12 +45,23 @@ export default function RootLayout() {
     void restore();
   }, [restore]);
 
+  /**
+   * The native window colour behind React's view tree. Without this it keeps the
+   * colour it was launched with, and every gap the tree does not paint — the
+   * frame before the first render, the strip behind a screen transition, the
+   * area under a dismissing sheet — flashes the other theme.
+   */
+  useEffect(() => {
+    void SystemUI.setBackgroundColorAsync(scheme === "dark" ? dark.bg : light.bg);
+  }, [scheme]);
+
   return (
     <TamaguiProvider config={tamaguiConfig} defaultTheme={scheme}>
       <Theme name={scheme}>
         <SafeAreaProvider>
           <StatusBar style={scheme === "dark" ? "light" : "dark"} />
           <Gate loading={loading || !ready} cookie={cookie} pathname={pathname} />
+          <SchemeFade scheme={scheme} />
         </SafeAreaProvider>
       </Theme>
     </TamaguiProvider>
@@ -58,7 +69,49 @@ export default function RootLayout() {
 }
 
 /**
- * Route guard. Kept inside the providers so the spinner and the redirect are
+ * Cross-fade over a theme change.
+ *
+ * A colour scheme cannot be animated on native: every view re-reads its theme in
+ * whichever frame it happens to re-render, so a flip is a scatter of repaints
+ * rather than one — and the components that re-render first (anything watching
+ * the preference store, which is what the theme switcher itself does) land a
+ * frame or two ahead of the rest.
+ *
+ * So the change is covered instead of animated: a full-screen pane in the *new*
+ * background colour mounts opaque and fades away, which is both the smooth
+ * transition and the thing that hides the scatter underneath it. Keyed by scheme
+ * so each change gets a fresh mount, `pointerEvents` off so it never eats a tap,
+ * and skipped on first paint — there is nothing to fade from at launch.
+ */
+function SchemeFade({ scheme }: { scheme: "light" | "dark" }) {
+  const first = useRef(true);
+  useEffect(() => {
+    first.current = false;
+  }, [scheme]);
+
+  if (first.current) return null;
+
+  return (
+    <YStack
+      key={scheme}
+      position="absolute"
+      top={0}
+      right={0}
+      bottom={0}
+      left={0}
+      backgroundColor="$bg"
+      pointerEvents="none"
+      // medium, not slow: the scatter it covers is one or two frames, and `slow`
+      // is damped hard enough (45/60) to read as the app hanging
+      transition="medium"
+      enterStyle={{ opacity: 1 }}
+      opacity={0}
+    />
+  );
+}
+
+/**
+ * Route guard. Kept inside the providers so the placeholder and the redirect are
  * already themed — and so SecureStore's async read cannot flash /login at an
  * employee who is in fact signed in.
  */
@@ -71,13 +124,14 @@ function Gate({
   cookie: string | null;
   pathname: string;
 }) {
-  if (loading) {
-    return (
-      <YStack flex={1} backgroundColor="$bg" justifyContent="center">
-        <Loading />
-      </YStack>
-    );
-  }
+  /**
+   * No skeleton and no spinner: this is a SecureStore read that finishes in a
+   * frame or two, and the screen it is deciding between is /login or the tabs.
+   * A skeleton of either would be a guess that flashes the wrong shape half the
+   * time — a themed background is the honest placeholder for "we do not know yet
+   * what goes here".
+   */
+  if (loading) return <YStack flex={1} backgroundColor="$bg" />;
 
   const onLogin = pathname === "/login";
   if (!cookie && !onLogin) return <Redirect href="/login" />;

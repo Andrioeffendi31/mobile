@@ -20,6 +20,14 @@ export type ThemePref = "system" | "light" | "dark";
 type PrefsState = {
   theme: ThemePref;
   setTheme: (t: ThemePref) => void;
+  /**
+   * Whether this device wants push at all. The OS permission is the other half:
+   * this one lets somebody turn approvals off again without digging into the
+   * system settings, and stops the tab layout re-registering a token at every
+   * launch after they did.
+   */
+  push: boolean;
+  setPush: (on: boolean) => void;
   /** false until the persisted value has been read, so the first paint does not
    *  flash the system theme at somebody who chose the other one */
   ready: boolean;
@@ -30,6 +38,8 @@ export const usePrefs = create<PrefsState>()(
     (set) => ({
       theme: "system",
       setTheme: (theme) => set({ theme }),
+      push: true,
+      setPush: (push) => set({ push }),
       ready: false,
     }),
     {
@@ -37,7 +47,7 @@ export const usePrefs = create<PrefsState>()(
       storage,
       // `ready` describes this process, not the user's choice — persisting it
       // would restore a stale "already hydrated" on the next launch
-      partialize: ({ theme }) => ({ theme }),
+      partialize: ({ theme, push }) => ({ theme, push }),
     },
   ),
 );
