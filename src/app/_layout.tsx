@@ -8,6 +8,11 @@ import { TamaguiProvider, Theme, YStack } from "tamagui";
 // side-effect import: TaskManager.defineTask has to run during app init, because
 // the OS can launch this bundle headlessly to deliver a background location
 import "@/background-ping";
+// side-effect import: hands expo-linear-gradient to Tamagui's <LinearGradient>.
+// Without it the native wrapper returns undefined instead of a component, which
+// React treats as a render error and Android reports as a force close — see the
+// Beranda header gradient.
+import "@tamagui/native/setup-expo-linear-gradient";
 import { useSession } from "@/api";
 import { usePrefs } from "@/prefs";
 import { Loading } from "@/ui";
