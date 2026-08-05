@@ -49,10 +49,24 @@ export function jamWib(withSeconds = false) {
   }).format(new Date());
 }
 
-export const todayWib = () =>
-  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta", dateStyle: "short" }).format(
-    new Date(),
-  );
+/**
+ * Today in WIB as YYYY-MM-DD. Assembled from formatToParts, not from a locale
+ * whose short date happens to be ISO: `dateStyle:"short"` follows the device's
+ * CLDR data, and on Android builds where en-CA short is `dd/MM/y` this returned
+ * "05/08/2026" — which then reached utc() as an Invalid Date and made
+ * plusHari() throw on toISOString(), blanking the whole Pengajuan screen.
+ */
+export const todayWib = () => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const part = (type: "year" | "month" | "day") =>
+    parts.find((p) => p.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+};
 
 /** "Selamat pagi" / "siang" / "malam", by WIB hour. */
 export function sapaan() {
