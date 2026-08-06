@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { Alert } from "react-native";
+import { Feather } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ScrollView, Text, YStack } from "tamagui";
-import { type Bootstrap, get, logout } from "@/api";
+import { type Bootstrap, get, logout, postForm } from "@/api";
 import { canPingInBackground } from "@/background-ping";
+import { canProcessImages, toWebp } from "@/image";
 import { available as passkeyAvailable, enrollPasskey } from "@/passkey";
 import { registerForPush, unregisterFromPush, usePushStatus } from "@/push";
 import { usePrefs } from "@/prefs";
@@ -41,6 +44,7 @@ import {
  */
 export default function Pengaturan() {
   const router = useRouter();
+  const avatar = useAvatarUpload();
   const qc = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: () => get<Bootstrap>("/api/me") });
 
@@ -80,12 +84,37 @@ export default function Pengaturan() {
           <ErrorNote message={(me.error as Error).message} onRetry={me.refetch} />
         ) : (
           <Card padding={14} flexDirection="row" alignItems="center" gap={12} elevation={1}>
-            <Avatar
-              seed={me.data.profile.id}
-              initials={me.data.profile.initials}
-              size={42}
-              borderRadius={12}
-            />
+            <YStack
+              pressStyle={{ opacity: 0.7 }}
+              onPress={avatar.choose}
+              accessibilityRole="button"
+              aria-label="Ganti foto profil"
+            >
+              <Avatar
+                seed={me.data.profile.id}
+                initials={me.data.profile.initials}
+                photoKey={me.data.profile.photoKey}
+                size={46}
+                borderRadius={13}
+                opacity={avatar.busy ? 0.5 : 1}
+              />
+              {/* a badge, because a tappable avatar with nothing on it is a secret */}
+              <YStack
+                position="absolute"
+                right={-3}
+                bottom={-3}
+                width={20}
+                height={20}
+                borderRadius={10}
+                backgroundColor="$accent"
+                borderWidth={2}
+                borderColor="$surface"
+                alignItems="center"
+                justifyContent="center"
+              >
+                <Feather name="camera" size={9} color="#fff" />
+              </YStack>
+            </YStack>
             <YStack flex={1}>
               <Text fontSize={14} fontWeight="600" color="$fg" numberOfLines={1}>
                 {me.data.profile.name}
@@ -151,6 +180,61 @@ export default function Pengaturan() {
       </ScrollView>
     </Screen>
   );
+}
+
+/**
+ * Pick or shoot, square-crop, upload as the employee's own photo.
+ *
+ * 1:1 at 512px — an avatar is displayed at 46px and kept forever, so the file
+ * should be small; the crop and the WebP encode are the same helper the clock-in
+ * selfie uses, with different numbers. Posted to /api/me/photo, which takes the
+ * employee id from the session: this screen cannot aim an upload at anyone else.
+ */
+function useAvatarUpload() {
+  const qc = useQueryClient();
+
+  const upload = useMutation({
+    mutationFn: async (source: "camera" | "library") => {
+      if (!canProcessImages()) throw new Error("Ganti foto butuh build ulang aplikasi");
+
+      const opts: ImagePicker.ImagePickerOptions = {
+        mediaTypes: ["images"],
+        quality: 1,
+        cameraType: ImagePicker.CameraType.front,
+      };
+      const picked =
+        source === "camera"
+          ? await ImagePicker.launchCameraAsync(opts)
+          : await ImagePicker.launchImageLibraryAsync(opts);
+      if (picked.canceled) return null;
+
+      const out = await toWebp(picked.assets[0], { ratio: 1, width: 512, compress: 0.7 });
+      const form = new FormData();
+      form.append("photo", {
+        uri: out.uri,
+        name: "profil.webp",
+        type: "image/webp",
+      } as unknown as Blob);
+      return postForm<{ key: string }>("/api/me/photo", form);
+    },
+    onSuccess: async (res) => {
+      if (!res) return;
+      // both carry avatars, and the key changed, so neither can be left stale
+      await qc.invalidateQueries({ queryKey: ["me"] });
+      await qc.invalidateQueries({ queryKey: ["team"] });
+      toast("Foto profil diperbarui");
+    },
+    onError: (e) => toast((e as Error).message),
+  });
+
+  const choose = () =>
+    Alert.alert("Ganti foto profil", "Ambil foto baru atau pilih dari galeri.", [
+      { text: "Batal", style: "cancel" },
+      { text: "Ambil foto", onPress: () => upload.mutate("camera") },
+      { text: "Pilih dari galeri", onPress: () => upload.mutate("library") },
+    ]);
+
+  return { choose, busy: upload.isPending };
 }
 
 /**

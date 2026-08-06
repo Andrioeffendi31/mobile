@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { RefreshControl } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { useFocusEffect } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScrollView, Text, XStack, YStack } from "tamagui";
@@ -49,6 +50,18 @@ export default function Tim() {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+
+  // same rule as Kehadiran: a search typed last visit would hide half the team
+  // from somebody who came back expecting the list
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        setQuery("");
+        setFilter("all");
+      },
+      [],
+    ),
+  );
 
   const q = useQuery({ queryKey: ["team"], queryFn: () => get<Team>("/api/me/team") });
 
@@ -115,7 +128,7 @@ export default function Tim() {
           <YStack gap={8}>
             {visible.map((m) => (
               <Card key={m.id} flexDirection="row" alignItems="center" gap={11} paddingHorizontal={13}>
-                <Avatar seed={m.id} initials={m.initials} />
+                <Avatar seed={m.id} initials={m.initials} photoKey={m.photoKey} />
                 <YStack flex={1}>
                   <Text fontSize={13.5} fontWeight="500" color="$fg" numberOfLines={1}>
                     {m.name}

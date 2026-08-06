@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { RefreshControl } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { useFocusEffect } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScrollView, Text, XStack, YStack } from "tamagui";
@@ -27,6 +28,23 @@ export default function Kehadiran() {
   /** the day whose detail sheet is open, by date — the sheet fetches its own */
   const [day, setDay] = useState<string | null>(null);
   const months = bulanTerakhir(12);
+
+  /**
+   * Back to this month, and no sheet, whenever the screen loses focus.
+   *
+   * Tabs stay mounted, so state outlives the visit: pick "Mei 2026", go to the
+   * Beranda, come back — and you are still reading May while the header says
+   * nothing about it. A tab should look the way it looks when you first open it.
+   */
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        setMonth(todayWib().slice(0, 7));
+        setDay(null);
+      },
+      [],
+    ),
+  );
 
   const q = useQuery({
     queryKey: ["attendance", month],

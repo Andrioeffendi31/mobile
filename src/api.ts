@@ -217,7 +217,11 @@ export type Bootstrap = {
   overtime: { minutes: number; capHours: number };
   pendingRequests: number;
   announcements: { id: number; title: string; category: string; date: string }[];
-  team: { total: number; present: number; avatars: { id: number; initials: string }[] };
+  team: {
+    total: number;
+    present: number;
+    avatars: { id: number; initials: string; photoKey: string | null }[];
+  };
 };
 
 /** One day, with the trail behind it — /api/me/attendance/<date>. */

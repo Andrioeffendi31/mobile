@@ -6,7 +6,7 @@ import { Image, Text, XStack, YStack } from "tamagui";
 import { API, type AttendanceDay, get, useSession } from "@/api";
 import { formatJarak, tanggalPanjang } from "@/format";
 import { tint } from "@/theme";
-import { AttBadge, Mono, Note, Readout, SheetShell, Skeleton } from "@/ui";
+import { AttBadge, Mono, Note, Readout, SheetShell, Skeleton, useAndroidBack } from "@/ui";
 
 /**
  * One day of attendance, opened from a card in Kehadiran.
@@ -245,6 +245,15 @@ function PhotoPreview({
   source: { uri: string; headers?: Record<string, string> } | null;
   onClose: () => void;
 }) {
+  /**
+   * Belt and braces with `onRequestClose`. The native dialog is documented to call
+   * that on back, and it very likely consumes the key event too — but if it ever
+   * forwards it instead, the sheet underneath would hear the same press and both
+   * would close at once. Registered after the sheet's own handler, so this one is
+   * asked first either way, and exactly one thing closes.
+   */
+  useAndroidBack(source !== null, onClose);
+
   return (
     <Modal
       visible={source !== null}

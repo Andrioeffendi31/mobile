@@ -159,6 +159,7 @@ export default function Beranda() {
             <Avatar
               seed={data.profile.id}
               initials={data.profile.initials}
+              photoKey={data.profile.photoKey}
               size={44}
               borderWidth={2}
               borderColor="rgba(255,255,255,.3)"
@@ -274,6 +275,7 @@ export default function Beranda() {
                     key={t.id}
                     seed={t.id}
                     initials={t.initials}
+                    photoKey={t.photoKey}
                     size={28}
                     marginLeft={i ? -8 : 0}
                     borderWidth={2}

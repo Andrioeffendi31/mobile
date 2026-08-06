@@ -1,10 +1,11 @@
 import { Children, type ComponentProps, type ReactNode, useEffect, useRef } from "react";
-import { Animated } from "react-native";
+import { Animated, BackHandler } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Button as TButton,
   Card as TCard,
+  Image,
   Input as TInput,
   Paragraph,
   ScrollView,
@@ -18,6 +19,7 @@ import {
   styled,
   useTheme,
 } from "tamagui";
+import { API, useSession } from "@/api";
 import { att, avatarColor, req, tint } from "@/theme";
 
 /**
@@ -163,13 +165,20 @@ export const AttBadge = ({ status }: { status: string }) => <Badge {...att(statu
 export const ReqBadge = ({ status }: { status: string }) => <Badge {...req(status)} />;
 
 /**
- * Initials on a colour derived from the employee id. Not tamagui's <Avatar>:
- * that one exists to show an image with a fallback, and nobody in this app has
- * a photo until HR uploads one.
+ * The employee's photo, or their initials on a colour derived from their id.
+ *
+ * Not tamagui's <Avatar>: that one is an image with a fallback, and the fallback
+ * here is the more interesting half — most people have no photo, and the coloured
+ * initials have to match the web console's, which derives the same colour from the
+ * same id.
+ *
+ * The photo is cropped to fill the circle (`cover`), never letterboxed: a face
+ * squeezed to fit a square is worse than a face with its edges outside it.
  */
 export function Avatar({
   seed,
   initials,
+  photoKey,
   size = 34,
   ...rest
 }: {
@@ -177,8 +186,18 @@ export function Avatar({
    *  and intersecting either with a different type collapses it to never */
   seed: number;
   initials: string;
+  /** R2 object key from the API; absent for everybody who has not set one */
+  photoKey?: string | null;
   size?: number;
 } & Omit<React.ComponentProps<typeof XStack>, "size" | "id">) {
+  /**
+   * /api/files streams a `photo/…` key rather than presigning it, so the session
+   * travels as a header on the image request — the same reason the attendance
+   * selfies do. The key itself changes on every upload, so nothing has to be
+   * cache-busted here.
+   */
+  const cookie = useSession((st) => st.cookie);
+
   return (
     <XStack
       width={size}
@@ -188,11 +207,25 @@ export function Avatar({
       alignItems="center"
       justifyContent="center"
       flexShrink={0}
+      overflow="hidden"
       {...rest}
     >
-      <Text color="#fff" fontWeight="600" fontSize={size < 30 ? 10 : 11.5}>
-        {initials}
-      </Text>
+      {photoKey ? (
+        <Image
+          source={{
+            uri: `${API}/api/files/${photoKey}`,
+            ...(cookie ? { headers: { cookie } } : {}),
+          }}
+          width={size}
+          height={size}
+          resizeMode="cover"
+          accessibilityLabel={`Foto ${initials}`}
+        />
+      ) : (
+        <Text color="#fff" fontWeight="600" fontSize={size < 30 ? 10 : 11.5}>
+          {initials}
+        </Text>
+      )}
     </XStack>
   );
 }
@@ -568,6 +601,30 @@ export function Note({
 }
 
 /**
+ * Android back — the button and the edge-swipe gesture, which dispatch the same
+ * event — runs `onBack` instead of navigating, while `active`.
+ *
+ * Without it, backing out of an open sheet pops the *screen* underneath: the
+ * employee lands on the previous tab having lost a half-filled form, and the only
+ * clue anything was dismissed is that it is gone. Returning true consumes the press
+ * so navigation never also acts on it.
+ *
+ * Bound only while active, so the four sheets mounted at any moment cannot swallow
+ * a back press between them. RN calls handlers in reverse registration order, so
+ * the thing opened last — a photo preview over a sheet — answers first.
+ */
+export function useAndroidBack(active: boolean, onBack: () => void) {
+  useEffect(() => {
+    if (!active) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      onBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [active, onBack]);
+}
+
+/**
  * The mockup's bottom sheet: 22px top corners, a drag handle, a fixed title, and
  * a scrolling middle so a long body cannot push the footer off screen.
  *
@@ -588,6 +645,8 @@ export function SheetShell({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  useAndroidBack(open, onClose);
+
   return (
     <Sheet
       modal

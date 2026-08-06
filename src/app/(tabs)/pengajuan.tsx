@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { RefreshControl } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Progress, ScrollView, Text, XStack, YStack } from "tamagui";
@@ -49,6 +49,19 @@ export default function Pengajuan() {
   useEffect(() => {
     if (params.open === "cuti" || params.open === "lembur") setTab(params.open);
   }, [params.open]);
+
+  /** same rule as the other tabs: leaving puts this screen back to its opening
+   *  state, so a half-filled form is never waiting behind a tab switch */
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        setSheet(null);
+        setViewing(null);
+        setTab("cuti");
+      },
+      [],
+    ),
+  );
 
   const q = useQuery({ queryKey: ["requests"], queryFn: () => get<Requests>("/api/me/requests") });
   const items = tab === "cuti" ? q.data?.cuti : q.data?.lembur;

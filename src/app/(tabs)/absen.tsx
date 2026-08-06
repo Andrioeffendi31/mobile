@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Feather } from "@expo/vector-icons";
-import { requireOptionalNativeModule } from "expo";
 import type { ImageResult } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
@@ -11,6 +10,7 @@ import { LinearGradient } from "@tamagui/linear-gradient";
 import { Image, ScrollView, Text, XStack, YStack } from "tamagui";
 import { type Bootstrap, get, postForm } from "@/api";
 import { formatJarak, jamWib, tanggalPanjang, jarakMeter } from "@/format";
+import { canProcessImages, toWebp } from "@/image";
 import { HEADER_GRADIENT, tint } from "@/theme";
 import { toast } from "@/toast";
 import {
@@ -37,8 +37,12 @@ import {
  *
  * The camera opens on arrival — the Beranda button says "absen masuk sekarang",
  * so the first thing that should happen is the thing you came to do. Location
- * resolves in parallel behind it; the selfie stays optional, so cancelling the
- * camera leaves a working screen rather than a dead end.
+ * resolves in parallel behind it.
+ *
+ * The selfie is mandatory for both punches, enforced by /api/me/clock before it
+ * writes anything. Cancelling the camera therefore leaves the screen usable but the
+ * button disabled, with the placeholder as the way back into it — a dead end would
+ * be a punch that fails on submit after the employee thought they were done.
  */
 
 type Fix = { lat: number; lng: number; label?: string };
@@ -46,17 +50,6 @@ type Fix = { lat: number; lng: number; label?: string };
 /** 3:4 portrait, 720px wide — enough for HR to recognise a face, small in R2. */
 const SELFIE_RATIO = 3 / 4;
 const SELFIE_WIDTH = 720;
-
-/**
- * Whether this binary was built with expo-image-manipulator in it.
- *
- * Asked before importing, not caught after: the module throws from its own module
- * scope, so even `await import()` inside a try only moves the explosion — Metro
- * evaluates the chunk and the throw surfaces as a redbox with no way back. This
- * asks the question without loading anything, and returns null instead of
- * throwing on a dev build made before the package was installed.
- */
-const canProcessImages = () => requireOptionalNativeModule("ExpoImageManipulator") !== null;
 
 export default function Absen() {
   const insets = useSafeAreaInsets();
@@ -133,7 +126,8 @@ export default function Absen() {
     // before the permission prompt, not after — asking for the camera only to
     // back out of it is worse than not asking
     if (!canProcessImages()) {
-      toast("Foto selfie butuh build ulang aplikasi · absen tetap bisa dilanjutkan");
+      // no longer a step that can be skipped, so say what it blocks
+      toast("Foto wajib untuk absen · aplikasi perlu di-build ulang");
       return;
     }
     const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -145,24 +139,9 @@ export default function Absen() {
     });
     if (shot.canceled) return;
 
-    const { uri, width, height } = shot.assets[0];
     setPreparing(true);
     try {
-      // reached only when the native module is present, so this cannot throw the
-      // way a module-scope import would
-      const { ImageManipulator, SaveFormat } = await import("expo-image-manipulator");
-      const ctx = ImageManipulator.manipulate(uri);
-      // wider than 3:4 → trim the sides; taller → trim top and bottom
-      if (width / height > SELFIE_RATIO) {
-        const w = Math.round(height * SELFIE_RATIO);
-        ctx.crop({ originX: Math.round((width - w) / 2), originY: 0, width: w, height });
-      } else {
-        const h = Math.round(width / SELFIE_RATIO);
-        ctx.crop({ originX: 0, originY: Math.round((height - h) / 2), width, height: h });
-      }
-      ctx.resize({ width: SELFIE_WIDTH });
-      const rendered = await ctx.renderAsync();
-      setSelfie(await rendered.saveAsync({ format: SaveFormat.WEBP, compress: 0.6 }));
+      setSelfie(await toWebp(shot.assets[0], { ratio: SELFIE_RATIO, width: SELFIE_WIDTH }));
     } catch {
       toast("Foto gagal diproses. Coba ambil ulang.");
     } finally {
@@ -220,7 +199,9 @@ export default function Absen() {
   });
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
-  const blocked = !fix || (!inside && !wfh) || submit.isPending;
+  /** the selfie counts here now: the server rejects a punch without one, so the
+   *  button must not offer to send what cannot be accepted */
+  const blocked = !fix || !selfie || (!inside && !wfh) || submit.isPending || preparing;
 
   // a cold deep link can land here before /api/me has answered — without this the
   // screen would flash "gagal memuat" at a request that is still in flight
@@ -361,14 +342,17 @@ export default function Absen() {
               ? "Konfirmasi absen masuk"
               : "Konfirmasi absen keluar"}
         </Btn>
+        {/* one reason at a time, in the order they have to be resolved */}
         <Text fontSize={11} color="$fgSubtle" textAlign="center">
-          {!fix
-            ? "Menunggu verifikasi lokasi"
-            : !inside && !wfh
-              ? "Tandai WFH untuk melanjutkan dari luar radius"
-              : selfie
-                ? "Lokasi dan foto siap dikirim"
-                : "Foto selfie opsional · lokasi siap"}
+          {preparing
+            ? "Menyiapkan foto…"
+            : !selfie
+              ? "Foto selfie wajib untuk absen"
+              : !fix
+                ? "Menunggu verifikasi lokasi"
+                : !inside && !wfh
+                  ? "Tandai WFH untuk melanjutkan dari luar radius"
+                  : "Lokasi dan foto siap dikirim"}
         </Text>
       </YStack>
     </Screen>
@@ -433,8 +417,8 @@ function Selfie({
         <Text fontSize={14} fontWeight="600" color="$fg">
           Ambil foto selfie
         </Text>
-        <Text fontSize={11.5} color="$fgSubtle">
-          Opsional · bukti kehadiran
+        <Text fontSize={11.5} color="$danger">
+          Wajib · bukti kehadiran
         </Text>
       </YStack>
     );
