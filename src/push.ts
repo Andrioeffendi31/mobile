@@ -43,6 +43,29 @@ export const usePushStatus = create<{ reason: string | null }>(() => ({
 
 const setReason = (reason: string | null) => usePushStatus.setState({ reason });
 
+
+/**
+ * The push failure, in one line an employee can act on.
+ *
+ * Expo's own message for a missing Firebase config is six sentences of build
+ * advice with a documentation URL in the middle, and it was being printed verbatim
+ * into a settings row. It is the right text for a developer reading Metro and the
+ * wrong text for somebody wondering why their phone is quiet — the specifics
+ * belong in the log, which is where they still go.
+ */
+function explain(e: Error): string {
+  const raw = e.message ?? "";
+  console.warn("[push]", raw);
+
+  if (/FirebaseApp|googleServicesFile|Firebase Messaging/i.test(raw)) {
+    return "Server notifikasi belum dikonfigurasi (Firebase) · hubungi tim IT";
+  }
+  if (/network|timeout|ENOTFOUND|Unable to resolve host/i.test(raw)) {
+    return "Tidak bisa menghubungi server notifikasi · periksa koneksi";
+  }
+  return "Token pemberitahuan gagal diambil · coba lagi nanti";
+}
+
 export async function registerForPush(): Promise<
   { ok: true; token: string } | { ok: false; reason: string }
 > {
@@ -51,8 +74,20 @@ export async function registerForPush(): Promise<
     return { ok: false as const, reason };
   };
 
-  if (!Constants.isDevice) return fail("Push hanya jalan di perangkat asli");
-
+  /**
+   * No emulator guard any more.
+   *
+   * This used to bail on `!Constants.isDevice`, which expo-constants removed along
+   * with the other deprecated properties — so it read `undefined` on every device
+   * and the check failed for everybody, on real hardware included, before a single
+   * notification API had been touched. The switch simply never turned on.
+   *
+   * Nothing replaces it: an emulator without Play Services fails at
+   * getExpoPushTokenAsync a few lines down, and that path already reports the real
+   * reason instead of a guess made up front. Restoring the guard would mean adding
+   * expo-device — a native module, and another rebuild — to say something the
+   * failure already says.
+   */
   const id = projectId();
   if (!id) return fail("EAS projectId belum diisi di app.json");
 
@@ -79,7 +114,7 @@ export async function registerForPush(): Promise<
   try {
     ({ data: token } = await Notifications.getExpoPushTokenAsync({ projectId: id }));
   } catch (e) {
-    return fail(`Token push gagal diambil: ${(e as Error).message}`);
+    return fail(explain(e as Error));
   }
 
   await postJson("/api/me/push", { token, platform: Platform.OS });

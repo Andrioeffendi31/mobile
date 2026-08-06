@@ -28,6 +28,17 @@ type PrefsState = {
    */
   push: boolean;
   setPush: (on: boolean) => void;
+  /**
+   * Whether a passkey was enrolled *from this device*.
+   *
+   * The server can only count an account's passkeys — the label we send at
+   * enrolment is "Android (biometrik)", which says nothing about which Android.
+   * So the device remembers its own answer, and the screen shows "terdaftar" only
+   * when both agree: this flag, and at least one passkey still existing server-side
+   * (deleting them all from the web console must clear the badge here too).
+   */
+  passkeyEnrolled: boolean;
+  setPasskeyEnrolled: (v: boolean) => void;
   /** false until the persisted value has been read, so the first paint does not
    *  flash the system theme at somebody who chose the other one */
   ready: boolean;
@@ -40,6 +51,8 @@ export const usePrefs = create<PrefsState>()(
       setTheme: (theme) => set({ theme }),
       push: true,
       setPush: (push) => set({ push }),
+      passkeyEnrolled: false,
+      setPasskeyEnrolled: (passkeyEnrolled) => set({ passkeyEnrolled }),
       ready: false,
     }),
     {
@@ -47,7 +60,7 @@ export const usePrefs = create<PrefsState>()(
       storage,
       // `ready` describes this process, not the user's choice — persisting it
       // would restore a stale "already hydrated" on the next launch
-      partialize: ({ theme, push }) => ({ theme, push }),
+      partialize: ({ theme, push, passkeyEnrolled }) => ({ theme, push, passkeyEnrolled }),
     },
   ),
 );

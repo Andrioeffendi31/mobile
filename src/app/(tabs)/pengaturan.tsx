@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -148,7 +148,7 @@ export default function Pengaturan() {
         <Group label="Keamanan & privasi">
           {/* gated by the caller, not by the row: a row that renders null inside
               a Group would leave its divider behind */}
-          {passkeyAvailable() ? <PasskeyRow /> : null}
+          {passkeyAvailable() ? <PasskeyRow count={me.data?.passkeys ?? 0} /> : null}
           <Row
             icon="map-pin"
             iconFg={trail.data ? "$success" : "$fgMuted"}
@@ -346,12 +346,31 @@ function Notifikasi() {
  * bind a passkey but has no endpoint to list or remove them, so this is a row
  * with an action rather than a switch that could not honour being turned off.
  */
-function PasskeyRow() {
-  const [done, setDone] = useState(false);
+function PasskeyRow({ count }: { count: number }) {
+  const { passkeyEnrolled, setPasskeyEnrolled } = usePrefs();
+  const qc = useQueryClient();
+
+  /**
+   * "Terdaftar" needs both halves to agree.
+   *
+   * The flag says this device enrolled; the count says the account still has a
+   * passkey. Either alone lies: the flag survives a passkey deleted from the web
+   * console, and the count says nothing about *which* device — the label we send
+   * at enrolment is "Android (biometrik)", which fits every Android there is.
+   */
+  const enrolled = passkeyEnrolled && count > 0;
+
+  // somebody removed the last passkey elsewhere, so this device's memory of
+  // enrolling is now wrong
+  useEffect(() => {
+    if (passkeyEnrolled && count === 0) setPasskeyEnrolled(false);
+  }, [passkeyEnrolled, count, setPasskeyEnrolled]);
+
   const daftar = useMutation({
     mutationFn: enrollPasskey,
-    onSuccess: () => {
-      setDone(true);
+    onSuccess: async () => {
+      setPasskeyEnrolled(true);
+      await qc.invalidateQueries({ queryKey: ["me"] });
       toast("Passkey terdaftar · lain kali cukup biometrik");
     },
     onError: (e) => toast((e as Error).message),
@@ -359,19 +378,21 @@ function PasskeyRow() {
 
   return (
     <Row
-      icon="shield"
-      iconFg={done ? "$success" : "$accent"}
-      iconBg={done ? "$successSubtle" : "$accentSubtle"}
+      icon={enrolled ? "check-circle" : "shield"}
+      iconFg={enrolled ? "$success" : "$accent"}
+      iconBg={enrolled ? "$successSubtle" : "$accentSubtle"}
       label="Masuk dengan biometrik"
-      noteTone={done ? "$success" : "$fgSubtle"}
+      noteTone={enrolled ? "$success" : "$fgSubtle"}
       note={
-        done
+        enrolled
           ? "Terdaftar di perangkat ini · aktif untuk login berikutnya"
-          : "Gunakan sidik jari atau Face ID perangkat"
+          : count > 0
+            ? `Aktif di ${count} perangkat lain · daftarkan yang ini juga`
+            : "Gunakan sidik jari atau Face ID perangkat"
       }
       loading={daftar.isPending}
       right={
-        done || daftar.isPending ? null : (
+        enrolled || daftar.isPending ? null : (
           <Btn small tone="ghost" onPress={() => daftar.mutate()}>
             Daftarkan
           </Btn>

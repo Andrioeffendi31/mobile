@@ -42,3 +42,11 @@ yarn-error.*
 
 # Tamagui compiler cache
 .tamagui/
+
+# FCM V1 service account key — a private key that can send notifications as this
+# project. Never commit it. google-services.json deliberately stays tracked: it is
+# public (it ships inside the APK), and EAS Build skips gitignored files — ignoring
+# it would silently strip Firebase out of every build again.
+fcm-service-account.json
+*service-account*.json
+api-*-*.json

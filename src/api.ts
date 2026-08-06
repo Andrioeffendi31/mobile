@@ -216,6 +216,8 @@ export type Bootstrap = {
   leave: { remaining: number; quota: number; used: number; expiresAt: string };
   overtime: { minutes: number; capHours: number };
   pendingRequests: number;
+  /** how many passkeys this account has, across all devices */
+  passkeys: number;
   announcements: { id: number; title: string; category: string; date: string }[];
   team: {
     total: number;
