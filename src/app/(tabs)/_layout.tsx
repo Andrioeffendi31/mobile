@@ -7,6 +7,7 @@ import { YStack, useTheme } from "tamagui";
 import { type Bootstrap, get } from "@/api";
 import { usePrefs } from "@/prefs";
 import { registerForPush, usePushStatus } from "@/push";
+import { syncReminders } from "@/reminders";
 import { Toast } from "@/toast";
 
 /**
@@ -37,6 +38,16 @@ export default function TabLayout() {
       if (!r.ok) console.info("[push] tidak aktif:", r.reason);
     });
   }, [wantsPush]);
+
+  /**
+   * Keep the clock-in alarm in step with the shift and today's punches. Driven by
+   * the bootstrap because every punch invalidates it, so absen.tsx cancels the
+   * rest of today's reminders without knowing this exists.
+   */
+  const wantsReminder = usePrefs((s) => s.reminder);
+  useEffect(() => {
+    void syncReminders(data);
+  }, [data, wantsReminder]);
 
   /** Tapping a notification opens the screen it is about (PRD-Mobile §6.6). */
   const tapped = Notifications.useLastNotificationResponse();

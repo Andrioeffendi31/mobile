@@ -110,6 +110,9 @@ function Day({ day }: { day: AttendanceDay }) {
       </XStack>
 
       {day.location ? <Readout label="Lokasi tercatat" value={day.location} /> : null}
+      {/* which geofence the day was judged against — the trail's distances below
+          are measured from this point, not from wherever is nearest today */}
+      <Readout label="Titik absen" value={day.office ?? "Tanpa titik kantor (WFH)"} />
       {day.note ? <Note text={day.note} fg="$fgMuted" bg="$inset" /> : null}
 
       {day.selfieKey ? (

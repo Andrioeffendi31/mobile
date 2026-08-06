@@ -43,6 +43,16 @@ type PrefsState = {
    */
   passkeyIds: string[];
   addPasskeyId: (id: string) => void;
+  /**
+   * Whether to schedule the clock-in/out alarm (see reminders.ts).
+   *
+   * Off by default, unlike `push`. Push only relays news about something the
+   * employee started themselves; this one makes the phone buzz at 08:00 whether
+   * or not anybody asked, and an update that starts doing that to everybody is a
+   * support queue, not a feature.
+   */
+  reminder: boolean;
+  setReminder: (on: boolean) => void;
   /** false until the persisted value has been read, so the first paint does not
    *  flash the system theme at somebody who chose the other one */
   ready: boolean;
@@ -55,6 +65,8 @@ export const usePrefs = create<PrefsState>()(
       setTheme: (theme) => set({ theme }),
       push: true,
       setPush: (push) => set({ push }),
+      reminder: false,
+      setReminder: (reminder) => set({ reminder }),
       passkeyIds: [],
       addPasskeyId: (id) =>
         set(({ passkeyIds }) =>
@@ -67,7 +79,12 @@ export const usePrefs = create<PrefsState>()(
       storage,
       // `ready` describes this process, not the user's choice — persisting it
       // would restore a stale "already hydrated" on the next launch
-      partialize: ({ theme, push, passkeyIds }) => ({ theme, push, passkeyIds }),
+      partialize: ({ theme, push, reminder, passkeyIds }) => ({
+        theme,
+        push,
+        reminder,
+        passkeyIds,
+      }),
     },
   ),
 );

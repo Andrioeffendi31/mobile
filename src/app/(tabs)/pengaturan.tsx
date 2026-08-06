@@ -143,7 +143,7 @@ export default function Pengaturan() {
         </Group>
 
         <Tampilan />
-        <Notifikasi />
+        <Notifikasi shift={me.data?.shift} />
 
         <Group label="Keamanan & privasi">
           {/* gated by the caller, not by the row: a row that renders null inside
@@ -273,8 +273,8 @@ function Tampilan() {
  * registered or dropped to match, so turning it off actually stops the approval
  * notifications instead of only remembering that you asked.
  */
-function Notifikasi() {
-  const { push, setPush } = usePrefs();
+function Notifikasi({ shift }: { shift?: Bootstrap["shift"] }) {
+  const { push, setPush, reminder, setReminder } = usePrefs();
   const reason = usePushStatus((s) => s.reason);
 
   const toggle = useMutation({
@@ -326,6 +326,26 @@ function Notifikasi() {
             onChange={(on) => toggle.mutate(on)}
             disabled={toggle.isPending}
           />
+        }
+      />
+      {/**
+       * Separate from Pemberitahuan on purpose: that switch is about news the
+       * server sends, this one makes the phone ring on a schedule it already
+       * knows. Turning one off should not silence the other.
+       */}
+      <Row
+        icon="clock"
+        iconFg={reminder ? "$accent" : "$fgMuted"}
+        iconBg={reminder ? "$accentSubtle" : "$inset"}
+        label="Pengingat absen"
+        noteTone={reminder ? "$accent" : "$fgSubtle"}
+        note={
+          reminder
+            ? `Berbunyi & bergetar Senin–Jumat ${shift ? `${shift.start} & ${shift.end}` : "sesuai jam shift"}`
+            : "Nonaktif · alarm saat jam masuk dan jam keluar"
+        }
+        right={
+          <Toggle label="Pengingat absen" checked={reminder} onChange={setReminder} />
         }
       />
       {problem ? (

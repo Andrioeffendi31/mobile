@@ -8,7 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "@tamagui/linear-gradient";
 import { Image, ScrollView, Text, XStack, YStack } from "tamagui";
-import { type Bootstrap, get, postForm } from "@/api";
+import { type Bootstrap, type Office, get, postForm } from "@/api";
 import { formatJarak, jamWib, tanggalPanjang, jarakMeter } from "@/format";
 import { canProcessImages, toWebp } from "@/image";
 import { HEADER_GRADIENT, tint } from "@/theme";
@@ -17,10 +17,12 @@ import {
   Btn,
   Card,
   ErrorNote,
+  Group,
   Mono,
   Note,
   Row,
   Screen,
+  SheetShell,
   Skeleton,
   SkeletonRows,
   Toggle,
@@ -62,6 +64,8 @@ export default function Absen() {
   const [selfie, setSelfie] = useState<ImageResult | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [wfh, setWfh] = useState(false);
+  const [officeId, setOfficeId] = useState<number | null>(null);
+  const [picker, setPicker] = useState(false);
   const [clock, setClock] = useState(jamWib(true));
 
   const data = me.data;
@@ -159,9 +163,40 @@ export default function Absen() {
     void takeSelfie();
   }, [readLocation, takeSelfie]);
 
+  /**
+   * Which office this punch is measured against.
+   *
+   * On the way out there is nothing to choose: the server locks clock-out to the
+   * office clock-in picked, so offering a list here would only invite somebody to
+   * pick one and watch it be ignored.
+   */
+  const chosen =
+    action === "out"
+      ? data?.offices.find((o) => o.id === data.today.officeId)
+      : data?.offices.find((o) => o.id === officeId);
+
+  // preselect the nearest once the fix lands, but never overwrite a choice already
+  // made — somebody who picked a branch while GPS was still spinning meant it
+  useEffect(() => {
+    if (!fix || officeId !== null || !data?.offices.length) return;
+    const near = data.offices.reduce((a, b) =>
+      jarakMeter(fix.lat, fix.lng, a.lat, a.lng) <= jarakMeter(fix.lat, fix.lng, b.lat, b.lng)
+        ? a
+        : b,
+    );
+    setOfficeId(near.id);
+  }, [fix, data, officeId]);
+
   const meter =
-    fix && data ? jarakMeter(fix.lat, fix.lng, data.office.lat, data.office.lng) : null;
-  const inside = meter !== null && data !== undefined && meter <= data.office.radiusM;
+    fix && chosen ? jarakMeter(fix.lat, fix.lng, chosen.lat, chosen.lng) : null;
+  /**
+   * Clocking out of a day that was clocked in as WFH has no office to measure
+   * against, and the server checks nothing — so neither does this. Without the
+   * second clause the screen would demand the WFH switch again to end a day it
+   * already knows was WFH.
+   */
+  const noGeofence = action === "out" && data?.today.officeId === null;
+  const inside = noGeofence || (meter !== null && meter <= chosen!.radiusM);
 
   const submit = useMutation({
     mutationFn: async () => {
@@ -172,6 +207,9 @@ export default function Absen() {
       form.append("lng", String(fix.lng));
       if (fix.label) form.append("location", fix.label);
       if (wfh) form.append("wfh", "1");
+      // only on the way in — the server reads clock-out's office off the row and
+      // ignores anything sent here
+      else if (action === "in" && chosen) form.append("locationId", String(chosen.id));
       if (selfie) {
         // React Native's FormData takes {uri,name,type} for a file part; there is
         // no File to read the bytes into, and reading them would double memory
@@ -278,9 +316,38 @@ export default function Absen() {
           error={locError}
           inside={inside}
           meter={meter}
-          office={data.office}
+          office={chosen}
           onRetry={readLocation}
         />
+
+        {/**
+         * Which office, as a row rather than a segmented control: the list is
+         * whatever HR created and a company with five branches would blow the pill
+         * strip apart. Read-only on the way out, where the choice is already made.
+         */}
+        <Card padding={0} overflow="hidden">
+          <Row
+            icon="map-pin"
+            label="Titik absen"
+            value={
+              chosen?.name ??
+              (noGeofence ? "WFH" : data.offices.length ? "Pilih kantor" : "Belum ada")
+            }
+            note={
+              action === "out"
+                ? noGeofence
+                  ? "Absen masuk hari ini ditandai WFH"
+                  : "Mengikuti lokasi absen masuk"
+                : data.offices.length > 1
+                  ? `${data.offices.length} lokasi tersedia`
+                  : undefined
+            }
+            chevron={action === "in" && data.offices.length > 1}
+            onPress={
+              action === "in" && data.offices.length > 1 ? () => setPicker(true) : undefined
+            }
+          />
+        </Card>
 
         {/**
          * Not a ghost button on a pale panel — that read as a disabled control
@@ -299,8 +366,9 @@ export default function Absen() {
             >
               <Feather name="alert-triangle" size={15} color={tint("$warning")} />
               <Text fontSize={12.5} color="$warning" lineHeight={18} flex={1}>
-                Anda {formatJarak(meter!)} dari kantor, di luar radius{" "}
-                {data.office.radiusM} m. Absen dari luar kantor harus ditandai WFH.
+                {chosen
+                  ? `Anda ${formatJarak(meter!)} dari ${chosen.name}, di luar radius ${chosen.radiusM} m. Absen dari luar kantor harus ditandai WFH.`
+                  : "Belum ada titik absen aktif. Absen harus ditandai WFH."}
               </Text>
             </XStack>
             <Row
@@ -355,6 +423,38 @@ export default function Absen() {
                   : "Lokasi dan foto siap dikirim"}
         </Text>
       </YStack>
+
+      <SheetShell open={picker} onClose={() => setPicker(false)} title="Pilih titik absen">
+        <Group>
+          {data.offices.map((o) => {
+            const jarak = fix ? jarakMeter(fix.lat, fix.lng, o.lat, o.lng) : null;
+            return (
+              <Row
+                key={o.id}
+                icon="map-pin"
+                iconFg={o.id === officeId ? "$accent" : "$fgMuted"}
+                iconBg={o.id === officeId ? "$accentSubtle" : "$inset"}
+                label={o.name}
+                note={
+                  jarak === null
+                    ? `Radius ${o.radiusM} m`
+                    : `${formatJarak(jarak)} dari sini · radius ${o.radiusM} m`
+                }
+                noteTone={jarak !== null && jarak <= o.radiusM ? "$success" : "$fgSubtle"}
+                right={
+                  o.id === officeId ? (
+                    <Feather name="check" size={17} color={tint("$accent")} />
+                  ) : undefined
+                }
+                onPress={() => {
+                  setOfficeId(o.id);
+                  setPicker(false);
+                }}
+              />
+            );
+          })}
+        </Group>
+      </SheetShell>
     </Screen>
   );
 }
@@ -470,7 +570,8 @@ function LocationCard({
   error: string | null;
   inside: boolean;
   meter: number | null;
-  office: Bootstrap["office"];
+  /** undefined while no office is picked yet, or when HR has none active */
+  office: Office | undefined;
   onRetry: () => void;
 }) {
   const tone = error
@@ -504,7 +605,9 @@ function LocationCard({
         ) : (
           <Text fontSize={11.5} color="$fgMuted" lineHeight={17}>
             {error ??
-              `${fix?.label ?? office.label} · ${formatJarak(meter ?? 0)} dari titik absen · radius ${office.radiusM} m`}
+              (office
+                ? `${fix?.label ?? office.name} · ${formatJarak(meter ?? 0)} dari ${office.name} · radius ${office.radiusM} m`
+                : (fix?.label ?? "Tidak ada titik absen aktif"))}
           </Text>
         )}
       </YStack>

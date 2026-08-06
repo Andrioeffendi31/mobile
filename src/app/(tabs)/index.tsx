@@ -196,7 +196,7 @@ export default function Beranda() {
             ) : clockedIn ? (
               <Text fontSize={12.5} color="$success" fontWeight="500" marginBottom={15}>
                 Absen masuk {data.today.clockIn?.slice(0, 5)} ·{" "}
-                {data.today.location ?? data.office.label}
+                {data.today.location ?? "lokasi tidak dicatat"}
               </Text>
             ) : (
               <Text fontSize={12.5} color="$fgMuted" marginBottom={15}>
@@ -221,8 +221,14 @@ export default function Beranda() {
 
             <XStack alignItems="center" justifyContent="center" gap={6} marginTop={11}>
               <Feather name="map-pin" size={12} color="#8b93a1" />
+              {/* with several offices there is no single radius to quote; the
+                  picker on the punch screen is where the numbers belong */}
               <Text fontSize={11} color="$fgSubtle">
-                Radius kantor {data.office.radiusM} m · {data.office.label}
+                {data.offices.length === 1
+                  ? `${data.offices[0].name} · radius ${data.offices[0].radiusM} m`
+                  : data.offices.length
+                    ? `${data.offices.length} titik absen tersedia`
+                    : "Belum ada titik absen · absen harus ditandai WFH"}
               </Text>
             </XStack>
           </Card>

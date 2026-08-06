@@ -192,6 +192,15 @@ export async function logout() {
 
 /* ── Response shapes ──────────────────────────────────────────────────────── */
 
+/** A place the employee may punch from, with its own geofence. */
+export type Office = {
+  id: number;
+  name: string;
+  lat: number;
+  lng: number;
+  radiusM: number;
+};
+
 export type Bootstrap = {
   profile: {
     id: number;
@@ -210,9 +219,13 @@ export type Bootstrap = {
     status: string;
     location: string | null;
     selfieKey: string | null;
+    /** the office chosen at clock-in; clock-out is locked to it */
+    officeId: number | null;
   };
+  /** this employee's division shift, already resolved against the company default */
   shift: { start: string; end: string; toleranceMinutes: number };
-  office: { lat: number; lng: number; radiusM: number; label: string };
+  /** every active clock-in point, nearest chosen automatically but overridable */
+  offices: Office[];
   leave: { remaining: number; quota: number; used: number; expiresAt: string };
   overtime: { minutes: number; capHours: number };
   pendingRequests: number;
@@ -237,6 +250,8 @@ export type AttendanceDay = {
   note: string | null;
   selfieKey: string | null;
   shift: { start: string; end: string };
+  /** which office the day was measured against; null on a WFH day */
+  office: string | null;
   events: {
     id: number;
     kind: "masuk" | "keluar" | "catatan" | "lokasi";

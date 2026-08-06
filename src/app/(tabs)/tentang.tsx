@@ -61,7 +61,6 @@ export default function Tentang() {
 
         {me.data ? (
           <Group label="Perusahaan">
-            <Row label="Lokasi kantor" value={me.data.office.label} />
             <Row
               label="Jam kerja"
               value={`${me.data.shift.start.slice(0, 5)}–${me.data.shift.end.slice(0, 5)}`}
@@ -70,7 +69,11 @@ export default function Tentang() {
               label="Toleransi keterlambatan"
               value={`${me.data.shift.toleranceMinutes} menit`}
             />
-            <Row label="Radius absen" value={`${me.data.office.radiusM} m`} />
+            {/* one row per office: the geofence is per-location now, so a single
+                "radius absen" figure would be true for at most one of them */}
+            {me.data.offices.map((o) => (
+              <Row key={o.id} label={o.name} value={`radius ${o.radiusM} m`} />
+            ))}
           </Group>
         ) : null}
 
