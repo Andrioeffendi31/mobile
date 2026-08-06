@@ -29,16 +29,20 @@ type PrefsState = {
   push: boolean;
   setPush: (on: boolean) => void;
   /**
-   * Whether a passkey was enrolled *from this device*.
+   * WebAuthn credential ids held *by this device*.
    *
-   * The server can only count an account's passkeys — the label we send at
-   * enrolment is "Android (biometrik)", which says nothing about which Android.
-   * So the device remembers its own answer, and the screen shows "terdaftar" only
-   * when both agree: this flag, and at least one passkey still existing server-side
-   * (deleting them all from the web console must clear the badge here too).
+   * A passkey lives in the phone's keystore, so only the phone knows it has one —
+   * the label we send at enrolment is "Android (biometrik)", which fits every
+   * Android there is. The credential id is the one value both sides can name, so
+   * the device keeps the ids it produced and the settings screen intersects them
+   * with what /api/me reports: a match means "this device", and a passkey deleted
+   * from the web console drops out of the intersection on its own.
+   *
+   * A list, not one id, because enrolling twice (reinstall, second attempt) leaves
+   * two live credentials and forgetting the first would under-report.
    */
-  passkeyEnrolled: boolean;
-  setPasskeyEnrolled: (v: boolean) => void;
+  passkeyIds: string[];
+  addPasskeyId: (id: string) => void;
   /** false until the persisted value has been read, so the first paint does not
    *  flash the system theme at somebody who chose the other one */
   ready: boolean;
@@ -51,8 +55,11 @@ export const usePrefs = create<PrefsState>()(
       setTheme: (theme) => set({ theme }),
       push: true,
       setPush: (push) => set({ push }),
-      passkeyEnrolled: false,
-      setPasskeyEnrolled: (passkeyEnrolled) => set({ passkeyEnrolled }),
+      passkeyIds: [],
+      addPasskeyId: (id) =>
+        set(({ passkeyIds }) =>
+          passkeyIds.includes(id) ? {} : { passkeyIds: [...passkeyIds, id] },
+        ),
       ready: false,
     }),
     {
@@ -60,7 +67,7 @@ export const usePrefs = create<PrefsState>()(
       storage,
       // `ready` describes this process, not the user's choice — persisting it
       // would restore a stale "already hydrated" on the next launch
-      partialize: ({ theme, push, passkeyEnrolled }) => ({ theme, push, passkeyEnrolled }),
+      partialize: ({ theme, push, passkeyIds }) => ({ theme, push, passkeyIds }),
     },
   ),
 );

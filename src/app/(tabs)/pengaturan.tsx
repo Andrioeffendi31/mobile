@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Alert } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -148,7 +148,7 @@ export default function Pengaturan() {
         <Group label="Keamanan & privasi">
           {/* gated by the caller, not by the row: a row that renders null inside
               a Group would leave its divider behind */}
-          {passkeyAvailable() ? <PasskeyRow count={me.data?.passkeys ?? 0} /> : null}
+          {passkeyAvailable() ? <PasskeyRow ids={me.data?.passkeys ?? []} /> : null}
           <Row
             icon="map-pin"
             iconFg={trail.data ? "$success" : "$fgMuted"}
@@ -346,30 +346,24 @@ function Notifikasi() {
  * bind a passkey but has no endpoint to list or remove them, so this is a row
  * with an action rather than a switch that could not honour being turned off.
  */
-function PasskeyRow({ count }: { count: number }) {
-  const { passkeyEnrolled, setPasskeyEnrolled } = usePrefs();
+function PasskeyRow({ ids }: { ids: string[] }) {
+  const mine = usePrefs((s) => s.passkeyIds);
   const qc = useQueryClient();
 
   /**
-   * "Terdaftar" needs both halves to agree.
+   * Which of the account's passkeys live on this phone.
    *
-   * The flag says this device enrolled; the count says the account still has a
-   * passkey. Either alone lies: the flag survives a passkey deleted from the web
-   * console, and the count says nothing about *which* device — the label we send
-   * at enrolment is "Android (biometrik)", which fits every Android there is.
+   * Both halves are needed: the local list alone survives a passkey deleted from
+   * the web console, and the server list alone cannot say *which* device holds
+   * one. Their intersection answers both — and shrinks by itself when a
+   * credential is revoked, so there is nothing to reset.
    */
-  const enrolled = passkeyEnrolled && count > 0;
-
-  // somebody removed the last passkey elsewhere, so this device's memory of
-  // enrolling is now wrong
-  useEffect(() => {
-    if (passkeyEnrolled && count === 0) setPasskeyEnrolled(false);
-  }, [passkeyEnrolled, count, setPasskeyEnrolled]);
+  const here = mine.filter((id) => ids.includes(id)).length;
+  const elsewhere = ids.length - here;
 
   const daftar = useMutation({
     mutationFn: enrollPasskey,
     onSuccess: async () => {
-      setPasskeyEnrolled(true);
       await qc.invalidateQueries({ queryKey: ["me"] });
       toast("Passkey terdaftar · lain kali cukup biometrik");
     },
@@ -378,21 +372,23 @@ function PasskeyRow({ count }: { count: number }) {
 
   return (
     <Row
-      icon={enrolled ? "check-circle" : "shield"}
-      iconFg={enrolled ? "$success" : "$accent"}
-      iconBg={enrolled ? "$successSubtle" : "$accentSubtle"}
+      icon={here ? "check-circle" : "shield"}
+      iconFg={here ? "$success" : "$accent"}
+      iconBg={here ? "$successSubtle" : "$accentSubtle"}
       label="Masuk dengan biometrik"
-      noteTone={enrolled ? "$success" : "$fgSubtle"}
+      noteTone={here ? "$success" : "$fgSubtle"}
       note={
-        enrolled
-          ? "Terdaftar di perangkat ini · aktif untuk login berikutnya"
-          : count > 0
-            ? `Aktif di ${count} perangkat lain · daftarkan yang ini juga`
+        here
+          ? elsewhere
+            ? `Terdaftar di perangkat ini · dan ${elsewhere} perangkat lain`
+            : "Terdaftar di perangkat ini · aktif untuk login berikutnya"
+          : elsewhere
+            ? `Aktif di ${elsewhere} perangkat lain · daftarkan yang ini juga`
             : "Gunakan sidik jari atau Face ID perangkat"
       }
       loading={daftar.isPending}
       right={
-        enrolled || daftar.isPending ? null : (
+        here || daftar.isPending ? null : (
           <Btn small tone="ghost" onPress={() => daftar.mutate()}>
             Daftarkan
           </Btn>

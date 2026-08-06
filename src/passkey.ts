@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import { Passkey } from "react-native-passkey";
 import { API, ApiError, get, postJson, readCookie, useSession } from "@/api";
+import { usePrefs } from "@/prefs";
 
 /**
  * Passkey sign-in and enrolment (PRD-Mobile §7).
@@ -48,6 +49,11 @@ export async function loginWithPasskey() {
     userVerification: "preferred",
   });
 
+  // signing in with a passkey proves this device holds that credential — the same
+  // thing enrolment records, learned for free. It backfills devices that enrolled
+  // before the app started remembering ids.
+  usePrefs.getState().addPasskeyId(assertion.id);
+
   const csrfRes = await fetch(`${API}/api/auth/csrf`);
   const { csrfToken } = (await csrfRes.json()) as { csrfToken: string };
   const csrfCookie = readCookie(csrfRes.headers.get("set-cookie"), "authjs.csrf-token");
@@ -94,4 +100,8 @@ export async function enrollPasskey() {
     response: attestation,
     label: Platform.OS === "ios" ? "iPhone (Face ID)" : "Android (biometrik)",
   });
+
+  // remembered only after the server accepted it, so a failed registration cannot
+  // leave the settings screen claiming a passkey that does not exist
+  usePrefs.getState().addPasskeyId(attestation.id);
 }
