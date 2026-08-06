@@ -175,17 +175,29 @@ export default function Absen() {
       ? data?.offices.find((o) => o.id === data.today.officeId)
       : data?.offices.find((o) => o.id === officeId);
 
-  // preselect the nearest once the fix lands, but never overwrite a choice already
-  // made — somebody who picked a branch while GPS was still spinning meant it
+  /**
+   * Two-step preselection.
+   *
+   * The company's default office fills the row immediately, so the screen never
+   * opens saying "Pilih kantor" when there is an obvious answer; the nearest one
+   * takes over as soon as GPS reports, because on the ground proximity beats
+   * whatever HR nominated. A manual pick outranks both — hence `picked`, which a
+   * plain `officeId !== null` guard could not express once a default fills it in.
+   */
+  const picked = useRef(false);
   useEffect(() => {
-    if (!fix || officeId !== null || !data?.offices.length) return;
+    if (picked.current || !data?.offices.length) return;
+    if (!fix) {
+      setOfficeId((prev) => prev ?? data.defaultOfficeId ?? null);
+      return;
+    }
     const near = data.offices.reduce((a, b) =>
       jarakMeter(fix.lat, fix.lng, a.lat, a.lng) <= jarakMeter(fix.lat, fix.lng, b.lat, b.lng)
         ? a
         : b,
     );
     setOfficeId(near.id);
-  }, [fix, data, officeId]);
+  }, [fix, data]);
 
   const meter =
     fix && chosen ? jarakMeter(fix.lat, fix.lng, chosen.lat, chosen.lng) : null;
@@ -447,6 +459,7 @@ export default function Absen() {
                   ) : undefined
                 }
                 onPress={() => {
+                  picked.current = true;
                   setOfficeId(o.id);
                   setPicker(false);
                 }}

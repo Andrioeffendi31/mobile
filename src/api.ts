@@ -226,6 +226,8 @@ export type Bootstrap = {
   shift: { start: string; end: string; toleranceMinutes: number };
   /** every active clock-in point, nearest chosen automatically but overridable */
   offices: Office[];
+  /** which one to offer while GPS is still answering; nearest takes over after */
+  defaultOfficeId: number | null;
   leave: { remaining: number; quota: number; used: number; expiresAt: string };
   overtime: { minutes: number; capHours: number };
   pendingRequests: number;
