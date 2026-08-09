@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "@tamagui/linear-gradient";
 import { ScrollView, Text, XStack, YStack } from "tamagui";
-import { type Bootstrap, get, logout } from "@/api";
+import { type Bootstrap, get } from "@/api";
 import { Pengumuman } from "@/announcements";
 import {
   canPingInBackground,
@@ -15,7 +15,6 @@ import {
 } from "@/background-ping";
 import { durasiJam, jamWib, sapaan, tanggalPanjang } from "@/format";
 import { HEADER_GRADIENT, tint } from "@/theme";
-import { unregisterFromPush } from "@/push";
 import { toast } from "@/toast";
 import {
   Avatar,
@@ -82,32 +81,11 @@ export default function Beranda() {
     );
   }
 
-  // PRD-Mobile §4: this app has one role. An admin who signs in here is told to
-  // use the web console rather than shown a half-built version of it.
-  if (data.profile.role !== "employee") {
-    return (
-      <Screen paddingHorizontal={22} justifyContent="center" gap={16}>
-        <Text fontSize={19} fontWeight="700" color="$fg">
-          Gunakan Ruang HR versi web
-        </Text>
-        <Text fontSize={13.5} color="$fgMuted" lineHeight={20}>
-          Akun {data.profile.name} punya peran{" "}
-          {data.profile.role === "hr_admin" ? "HR Admin" : "Manager"}. Persetujuan,
-          data karyawan dan laporan dikerjakan dari konsol web, bukan dari aplikasi ini.
-        </Text>
-        <Btn
-          tone="ghost"
-          onPress={async () => {
-            await unregisterFromPush();
-            await logout();
-            qc.clear();
-          }}
-        >
-          Keluar
-        </Btn>
-      </Screen>
-    );
-  }
+  // No role wall here any more. An HR Admin is an employee too: they have a
+  // division, a shift and a geofence like everyone else, and telling them to go
+  // and use the web console left them with no way to record their own attendance.
+  // Everything this app touches is /api/me/* — session-scoped by withMe — so a
+  // higher role grants nothing extra here, it just works.
 
   const quick = [
     { label: "Ajukan cuti", icon: "calendar", tint: "$accent", bg: "$accentSubtle", to: "/pengajuan?open=cuti" },

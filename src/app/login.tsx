@@ -50,7 +50,7 @@ export default function Login() {
               Ruang HR
             </Text>
             <Text fontSize={13.5} color="$fgMuted">
-              Masuk dengan akun karyawan Anda.
+              Masuk dengan akun Ruang HR Anda.
             </Text>
           </YStack>
 
