@@ -3,7 +3,7 @@ import { Feather } from "@expo/vector-icons";
 import type { ImageResult } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "@tamagui/linear-gradient";
@@ -153,16 +153,6 @@ export default function Absen() {
     }
   }, []);
 
-  // once per visit, not once per render: re-opening the camera after somebody
-  // deliberately cancelled it would trap them on this screen
-  const opened = useRef(false);
-  useEffect(() => {
-    if (opened.current) return;
-    opened.current = true;
-    void readLocation();
-    void takeSelfie();
-  }, [readLocation, takeSelfie]);
-
   /**
    * Which office this punch is measured against.
    *
@@ -197,7 +187,9 @@ export default function Absen() {
         : b,
     );
     setOfficeId(near.id);
-  }, [fix, data]);
+    // `officeId` is a dependency so that clearing it on blur re-runs this and the
+    // default lands again; both branches are idempotent, so there is no loop
+  }, [fix, data, officeId]);
 
   const meter =
     fix && chosen ? jarakMeter(fix.lat, fix.lng, chosen.lat, chosen.lng) : null;
@@ -247,6 +239,46 @@ export default function Absen() {
       else router.replace("/");
     },
   });
+
+  // bound once to the mutation observer, so it is a stable dependency below —
+  // unlike `submit`, which is a fresh object every render
+  const resetSubmit = submit.reset;
+
+  /**
+   * Arriving starts the punch; leaving throws away everything that was not sent.
+   *
+   * Both halves belong on focus rather than on mount, because this screen never
+   * unmounts: `absen` is a Tabs.Screen with `href: null` (see (tabs)/_layout.tsx),
+   * so going back only switches which route is focused and every useState survives.
+   * That is why an abandoned punch used to be sitting there on the next visit —
+   * yesterday's selfie, a stale GPS fix, and a WFH switch somebody had flipped —
+   * ready to be submitted as if it had just been taken.
+   *
+   * Focus also expresses "open the camera once per visit" more honestly than the
+   * ref the mount effect used to carry: the body runs once per focus, so cancelling
+   * the camera does not reopen it, and coming back does.
+   *
+   * Nothing here fires on a successful punch beyond the same cleanup, which is what
+   * we want — onSuccess navigates away, so the screen is left empty for next time.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      void readLocation();
+      void takeSelfie();
+      return () => {
+        setFix(null);
+        setLocError(null);
+        setSelfie(null);
+        setPreparing(false);
+        setWfh(false);
+        setOfficeId(null);
+        setPicker(false);
+        picked.current = false;
+        // clears the failure note too: a rejected punch must not greet the next visit
+        resetSubmit();
+      };
+    }, [readLocation, takeSelfie, resetSubmit]),
+  );
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
   /** the selfie counts here now: the server rejects a punch without one, so the
