@@ -11,6 +11,7 @@ import { Image, ScrollView, Text, XStack, YStack } from "tamagui";
 import { type Bootstrap, type Office, get, postForm } from "@/api";
 import { formatJarak, jamWib, tanggalPanjang, jarakMeter } from "@/format";
 import { canProcessImages, toWebp } from "@/image";
+import { Peta } from "@/peta";
 import { HEADER_GRADIENT, tint } from "@/theme";
 import { toast } from "@/toast";
 import {
@@ -363,6 +364,31 @@ export default function Absen() {
           office={chosen}
           onRetry={readLocation}
         />
+
+        {/* the same verdict the card above states in words: the fence, and which
+            side of it you are standing on */}
+        {fix ? (
+          <Peta
+            points={[
+              { lat: fix.lat, lng: fix.lng, tone: "saya", label: "Posisi Anda" },
+              ...(chosen
+                ? [
+                    {
+                      lat: chosen.lat,
+                      lng: chosen.lng,
+                      tone: "kantor" as const,
+                      label: chosen.name,
+                    },
+                  ]
+                : []),
+            ]}
+            circles={
+              chosen && !noGeofence
+                ? [{ lat: chosen.lat, lng: chosen.lng, radiusM: chosen.radiusM }]
+                : []
+            }
+          />
+        ) : null}
 
         {/**
          * Which office, as a row rather than a segmented control: the list is

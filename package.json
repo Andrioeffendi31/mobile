@@ -33,6 +33,7 @@
     "react-native-passkey": "^3.6.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
+    "react-native-webview": "13.16.1",
     "tamagui": "^2.6.2",
     "zustand": "^5.0.14"
   },

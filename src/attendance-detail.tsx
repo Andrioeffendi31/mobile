@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Image, Text, XStack, YStack } from "tamagui";
 import { API, type AttendanceDay, get, useSession } from "@/api";
 import { formatJarak, tanggalPanjang } from "@/format";
+import { Peta, type Titik } from "@/peta";
 import { tint } from "@/theme";
 import { AttBadge, Mono, Note, Readout, SheetShell, Skeleton, useAndroidBack } from "@/ui";
 
@@ -95,6 +96,31 @@ function Day({ day }: { day: AttendanceDay }) {
   });
   const [preview, setPreview] = useState<string | null>(null);
 
+  /**
+   * The events as map dots, in order. A ping beyond the fence gets the warning
+   * colour — that judgement is already made for us by the server, which sends the
+   * distance measured against the office this day was actually punched at.
+   */
+  const titik: Titik[] = day.events.flatMap((e) =>
+    e.lat === null || e.lng === null
+      ? []
+      : [
+          {
+            lat: e.lat,
+            lng: e.lng,
+            label: `${KIND[e.kind].label} ${e.at}`,
+            tone:
+              e.kind === "masuk"
+                ? ("masuk" as const)
+                : e.kind === "keluar"
+                  ? ("keluar" as const)
+                  : day.officeGeo && e.distanceM !== null && e.distanceM > day.officeGeo.radiusM
+                    ? ("peringatan" as const)
+                    : ("ping" as const),
+          },
+        ],
+  );
+
   return (
     <>
       <XStack alignItems="center" gap={8} flexWrap="wrap">
@@ -114,6 +140,28 @@ function Day({ day }: { day: AttendanceDay }) {
           are measured from this point, not from wherever is nearest today */}
       <Readout label="Titik absen" value={day.office ?? "Tanpa titik kantor (WFH)"} />
       {day.note ? <Note text={day.note} fg="$fgMuted" bg="$inset" /> : null}
+
+      {/* the trail the list below spells out, as one picture — the ping that fell
+          outside the fence is the thing you are looking for, and it is easier to
+          spot on a map than in twelve rows of "1,2 km dari kantor" */}
+      {titik.length > 0 ? (
+        <Peta
+          trail
+          points={
+            day.officeGeo
+              ? [
+                  {
+                    ...day.officeGeo,
+                    tone: "kantor" as const,
+                    label: day.office ?? "Kantor",
+                  },
+                  ...titik,
+                ]
+              : titik
+          }
+          circles={day.officeGeo ? [day.officeGeo] : []}
+        />
+      ) : null}
 
       {day.selfieKey ? (
         <Section label="Foto absen">

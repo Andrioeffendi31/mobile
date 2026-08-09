@@ -254,6 +254,8 @@ export type AttendanceDay = {
   shift: { start: string; end: string };
   /** which office the day was measured against; null on a WFH day */
   office: string | null;
+  /** the same office as a point, for the map; null on a WFH day */
+  officeGeo: { lat: number; lng: number; radiusM: number } | null;
   events: {
     id: number;
     kind: "masuk" | "keluar" | "catatan" | "lokasi";
@@ -262,6 +264,9 @@ export type AttendanceDay = {
     note: string | null;
     photoKey: string | null;
     distanceM: number | null;
+    /** null on rows written before coordinates were kept */
+    lat: number | null;
+    lng: number | null;
   }[];
 };
 
