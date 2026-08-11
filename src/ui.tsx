@@ -1,5 +1,12 @@
-import { Children, type ComponentProps, type ReactNode, useEffect, useRef } from "react";
-import { Animated, BackHandler } from "react-native";
+import {
+  Children,
+  type ComponentProps,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { Animated, BackHandler, Keyboard, Platform } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -632,6 +639,38 @@ export function useAndroidBack(active: boolean, onBack: () => void) {
 }
 
 /**
+ * The keyboard's height while it is up, 0 otherwise.
+ *
+ * <KeyboardAvoidingView> used to do this job and no longer can: Android is
+ * edge-to-edge since SDK 54, so the window keeps its full height when the
+ * keyboard appears (`adjustResize` in the manifest is inert under it) and the
+ * keyboard simply covers the bottom of the screen — the submit button. The
+ * measurement the events carry is the one thing that still describes it, and
+ * turning it into padding is less code than a keyboard library.
+ */
+export function useKeyboardHeight() {
+  const [height, setHeight] = useState(0);
+
+  useEffect(() => {
+    // iOS announces the keyboard before it slides in, which keeps the padding in
+    // step with the animation; Android only has the "did" pair.
+    const ios = Platform.OS === "ios";
+    const shown = Keyboard.addListener(ios ? "keyboardWillShow" : "keyboardDidShow", (e) =>
+      setHeight(e.endCoordinates.height),
+    );
+    const hidden = Keyboard.addListener(ios ? "keyboardWillHide" : "keyboardDidHide", () =>
+      setHeight(0),
+    );
+    return () => {
+      shown.remove();
+      hidden.remove();
+    };
+  }, []);
+
+  return height;
+}
+
+/**
  * The mockup's bottom sheet: 22px top corners, a drag handle, a fixed title, and
  * a scrolling middle so a long body cannot push the footer off screen.
  *
@@ -652,6 +691,7 @@ export function SheetShell({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  const keyboard = useKeyboardHeight();
   useAndroidBack(open, onClose);
 
   return (
@@ -670,6 +710,14 @@ export function SheetShell({
         borderTopLeftRadius={22}
         borderTopRightRadius={22}
         paddingTop={12}
+        /**
+         * The sheet keeps its snap point when the keyboard opens, so the keyboard
+         * lands on top of its lower third — the footer, and whichever field sits
+         * there. Padding the frame by that height lifts the footer clear and
+         * shortens the scrolling middle by exactly as much, which is what makes
+         * the focused field reachable instead of buried.
+         */
+        paddingBottom={keyboard}
       >
         <Text fontSize={18} fontWeight="700" color="$fg" paddingHorizontal={22}>
           {title}
@@ -685,7 +733,8 @@ export function SheetShell({
             gap={10}
             paddingHorizontal={22}
             paddingTop={14}
-            paddingBottom={26}
+            // the 26px is the home indicator's clearance, which the keyboard covers
+            paddingBottom={keyboard ? 14 : 26}
             borderTopWidth={1}
             borderTopColor="$line"
           >

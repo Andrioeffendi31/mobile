@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
-import { Image, Keyboard, Platform, ScrollView } from "react-native";
+import { useState } from "react";
+import { Image, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMutation } from "@tanstack/react-query";
 import { Text, XStack, YStack } from "tamagui";
 import { API, login } from "@/api";
 import { available, loginWithPasskey } from "@/passkey";
-import { Btn, Field, Input, Note, Screen } from "@/ui";
+import { Btn, Field, Input, Note, Screen, useKeyboardHeight } from "@/ui";
 
 /**
  * Email + password, plus passkey when the device and host support it
@@ -13,38 +13,6 @@ import { Btn, Field, Input, Note, Screen } from "@/ui";
  * when it cannot work: a passkey needs an HTTPS host that publishes the
  * association files, so it is absent while pointing at a LAN dev server.
  */
-/**
- * The keyboard's height while it is up, 0 otherwise.
- *
- * <KeyboardAvoidingView> used to do this job and no longer can: Android is
- * edge-to-edge since SDK 54, so the window keeps its full height when the
- * keyboard appears (`adjustResize` in the manifest is inert under it) and the
- * keyboard simply covers the bottom of the screen — the "Masuk" button. The
- * measurement the events carry is the one thing that still describes it, and
- * turning it into padding is less code than a keyboard library.
- */
-function useKeyboardHeight() {
-  const [height, setHeight] = useState(0);
-
-  useEffect(() => {
-    // iOS announces the keyboard before it slides in, which keeps the padding in
-    // step with the animation; Android only has the "did" pair.
-    const ios = Platform.OS === "ios";
-    const shown = Keyboard.addListener(ios ? "keyboardWillShow" : "keyboardDidShow", (e) =>
-      setHeight(e.endCoordinates.height),
-    );
-    const hidden = Keyboard.addListener(ios ? "keyboardWillHide" : "keyboardDidHide", () =>
-      setHeight(0),
-    );
-    return () => {
-      shown.remove();
-      hidden.remove();
-    };
-  }, []);
-
-  return height;
-}
-
 export default function Login() {
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState("");
