@@ -690,6 +690,84 @@ export function SheetShell({
   );
 }
 
+/**
+ * The confirmation sheet, in place of Alert.alert.
+ *
+ * A system alert is the one surface in the app that is not the app: it arrives in
+ * the OS's own typography, ignores the theme (a light box over a dark screen on
+ * Android), and orders its buttons differently per platform. Same question, same
+ * bottom sheet as everything else instead.
+ *
+ * `snapPointsMode="fit"` — a confirmation is as tall as its buttons; the 88%
+ * <SheetShell> is for forms. "Batal" is always last and always just closes, so the
+ * dismissing action sits nearest the thumb and never has to be passed in.
+ */
+export function ConfirmSheet({
+  open,
+  onClose,
+  title,
+  message,
+  actions,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  message?: string;
+  actions: { label: string; tone?: ComponentProps<typeof Btn>["tone"]; onPress: () => void }[];
+}) {
+  const insets = useSafeAreaInsets();
+  useAndroidBack(open, onClose);
+
+  return (
+    <Sheet
+      modal
+      open={open}
+      onOpenChange={(next: boolean) => !next && onClose()}
+      snapPointsMode="fit"
+      dismissOnSnapToBottom
+      transition="medium"
+    >
+      <Sheet.Overlay backgroundColor="rgba(20,22,27,.42)" />
+      <Sheet.Handle />
+      <Sheet.Frame
+        backgroundColor="$surface"
+        borderTopLeftRadius={22}
+        borderTopRightRadius={22}
+        paddingTop={14}
+        paddingHorizontal={22}
+        paddingBottom={insets.bottom + 18}
+        gap={9}
+      >
+        <Text fontSize={17} fontWeight="700" color="$fg">
+          {title}
+        </Text>
+        {message ? (
+          <Text fontSize={13.5} lineHeight={19} color="$fgMuted" marginBottom={4}>
+            {message}
+          </Text>
+        ) : null}
+        {actions.map((action) => (
+          <Btn
+            key={action.label}
+            tone={action.tone}
+            onPress={() => {
+              // close first: the sheet's exit animation should not wait on whatever
+              // the action does, and every action here dismisses the question
+              onClose();
+              action.onPress();
+            }}
+          >
+            {action.label}
+          </Btn>
+        ))}
+        <Btn tone="ghost" onPress={onClose}>
+          Batal
+        </Btn>
+      </Sheet.Frame>
+    </Sheet>
+  );
+}
+
 export function Empty({ text }: { text: string }) {
   return (
     <YStack

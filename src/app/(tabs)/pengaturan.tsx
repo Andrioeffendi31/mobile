@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Alert } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Linking from "expo-linking";
@@ -18,6 +17,7 @@ import {
   Badge,
   Btn,
   Card,
+  ConfirmSheet,
   ErrorNote,
   Group,
   GroupLabel,
@@ -52,21 +52,15 @@ export default function Pengaturan() {
   // permission back so "HR cannot see my location" has an answer in the app
   const trail = useQuery({ queryKey: ["bg-location"], queryFn: canPingInBackground });
 
-  const keluar = () =>
-    Alert.alert("Keluar dari akun?", "Anda perlu masuk lagi untuk mencatat absensi.", [
-      { text: "Batal", style: "cancel" },
-      {
-        text: "Keluar",
-        style: "destructive",
-        // clear the cache too: the next person to sign in on this phone must not
-        // see the previous employee's cached leave balance for a frame
-        onPress: async () => {
-          await unregisterFromPush();
-          await logout();
-          qc.clear();
-        },
-      },
-    ]);
+  const [confirmKeluar, setConfirmKeluar] = useState(false);
+
+  // clear the cache too: the next person to sign in on this phone must not see
+  // the previous employee's cached leave balance for a frame
+  const keluar = async () => {
+    await unregisterFromPush();
+    await logout();
+    qc.clear();
+  };
 
   return (
     <Screen>
@@ -174,10 +168,19 @@ export default function Pengaturan() {
           />
         </Group>
 
-        <Btn tone="danger" onPress={keluar} marginTop={2}>
+        <Btn tone="danger" onPress={() => setConfirmKeluar(true)} marginTop={2}>
           Keluar dari akun
         </Btn>
       </ScrollView>
+
+      <ConfirmSheet
+        open={confirmKeluar}
+        onClose={() => setConfirmKeluar(false)}
+        title="Keluar dari akun?"
+        message="Anda perlu masuk lagi untuk mencatat absensi."
+        actions={[{ label: "Keluar", tone: "danger", onPress: () => void keluar() }]}
+      />
+      {avatar.sheet}
     </Screen>
   );
 }
@@ -227,14 +230,24 @@ function useAvatarUpload() {
     onError: (e) => toast((e as Error).message),
   });
 
-  const choose = () =>
-    Alert.alert("Ganti foto profil", "Ambil foto baru atau pilih dari galeri.", [
-      { text: "Batal", style: "cancel" },
-      { text: "Ambil foto", onPress: () => upload.mutate("camera") },
-      { text: "Pilih dari galeri", onPress: () => upload.mutate("library") },
-    ]);
+  // the sheet travels with the hook rather than being rebuilt at the call site:
+  // the two options and the mutation they drive are one thing
+  const [open, setOpen] = useState(false);
 
-  return { choose, busy: upload.isPending };
+  const sheet = (
+    <ConfirmSheet
+      open={open}
+      onClose={() => setOpen(false)}
+      title="Ganti foto profil"
+      message="Ambil foto baru atau pilih dari galeri."
+      actions={[
+        { label: "Ambil foto", onPress: () => upload.mutate("camera") },
+        { label: "Pilih dari galeri", tone: "ghost", onPress: () => upload.mutate("library") },
+      ]}
+    />
+  );
+
+  return { choose: () => setOpen(true), busy: upload.isPending, sheet };
 }
 
 /**
