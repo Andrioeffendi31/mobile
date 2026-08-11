@@ -22,10 +22,13 @@ export const light = {
    * Inputs get their placeholder hue from this theme key, and leaving it out
    * meant inheriting the v5 preset's — a mid grey picked for the preset's own
    * surfaces, which against ours sat near 2:1 in dark mode and read as an empty
-   * field. `fgSubtle` is the palette's own "quiet text" and clears 3:1 on
-   * `$surface` in both themes.
+   * field.
+   *
+   * Not `fgSubtle` (#8b93a1) either: on white that is 3.1:1, which passes for a
+   * border but not for the words it actually renders. This is the same hue
+   * darkened to 4.9:1 — still visibly quieter than `$fg` typed into the box.
    */
-  placeholderColor: "#8b93a1",
+  placeholderColor: "#6b7280",
   accent: "#4f46e5",
   accentHover: "#4338ca",
   accentFg: "#ffffff",
@@ -67,8 +70,8 @@ export const dark: typeof light = {
   fg: "#f2f4f7",
   fgMuted: "#a2abba",
   fgSubtle: "#79828f",
-  // 4.3:1 on $surface, where the inherited default sat near 2:1
-  placeholderColor: "#79828f",
+  // 4.7:1 on $surface, where the inherited default sat near 2:1
+  placeholderColor: "#7e8794",
   accent: "#6366f1",
   accentHover: "#818cf8",
   accentFg: "#ffffff",
