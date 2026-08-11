@@ -354,8 +354,8 @@ function Notifikasi({ shift }: { shift?: Bootstrap["shift"] }) {
         noteTone={reminder ? "$accent" : "$fgSubtle"}
         note={
           reminder
-            ? `Berbunyi & bergetar Senin–Jumat ${shift ? `${shift.start} & ${shift.end}` : "sesuai jam shift"}`
-            : "Nonaktif · alarm saat jam masuk dan jam keluar"
+            ? `Berbunyi & bergetar Senin–Jumat, 10 menit sebelum ${shift ? `${shift.start} & ${shift.end}` : "jam shift"}`
+            : "Nonaktif · alarm 10 menit sebelum jam masuk dan jam keluar"
         }
         right={
           <Toggle label="Pengingat absen" checked={reminder} onChange={setReminder} />

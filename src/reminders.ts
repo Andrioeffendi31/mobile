@@ -28,6 +28,46 @@ const ALL_IDS = WEEKDAYS.flatMap((d) => KINDS.map((k) => idFor(k, d)));
 const CHANNEL = "absen";
 
 /**
+ * How early the alarm goes off. A reminder that arrives *at* the shift start is
+ * already late — the point is the ten minutes somebody still has to park, walk in
+ * and open the app.
+ */
+const LEAD_MINUTES = 10;
+
+/**
+ * The shift time moved back by the lead, as a weekly trigger's fields.
+ *
+ * The wrap matters for a shift that starts inside the first ten minutes of the
+ * day: 00:05 minus the lead is 23:55 *the day before*, so the trigger's weekday
+ * moves back with it. Expo numbers weekdays 1–7 with Sunday = 1, hence the
+ * `((w + 5) % 7) + 1` rather than `w - 1`.
+ */
+function alarmAt(time: string, weekday: number) {
+  const [h, m] = time.split(":").map(Number);
+  const minutes = h * 60 + m - LEAD_MINUTES;
+  const wrapped = minutes < 0;
+  const total = wrapped ? minutes + 24 * 60 : minutes;
+
+  return {
+    weekday: wrapped ? ((weekday + 5) % 7) + 1 : weekday,
+    hour: Math.floor(total / 60),
+    minute: total % 60,
+  };
+}
+
+if (__DEV__) {
+  const eq = (got: object, want: object) => {
+    if (JSON.stringify(got) !== JSON.stringify(want)) {
+      throw new Error(`alarmAt: ${JSON.stringify(got)} ≠ ${JSON.stringify(want)}`);
+    }
+  };
+  eq(alarmAt("08:00", 2), { weekday: 2, hour: 7, minute: 50 });
+  eq(alarmAt("17:05", 6), { weekday: 6, hour: 16, minute: 55 });
+  eq(alarmAt("00:05", 2), { weekday: 1, hour: 23, minute: 55 }); // Monday shift, Sunday alarm
+  eq(alarmAt("00:00", 1), { weekday: 7, hour: 23, minute: 50 }); // Sunday wraps to Saturday
+}
+
+/**
  * A channel of its own, at HIGH importance with a vibration pattern — a punch
  * reminder that arrives silently in the shade is not a reminder. The ordinary
  * "default" channel stays where it is, at DEFAULT importance, so approval news
@@ -93,23 +133,24 @@ export async function syncReminders(me: Bootstrap | undefined) {
       const done = kind === "in" ? me.today.clockIn : me.today.clockOut;
       if (weekday === todayWeekday && done) continue;
 
-      const [h, m] = (kind === "in" ? me.shift.start : me.shift.end).split(":");
+      const time = kind === "in" ? me.shift.start : me.shift.end;
       await Notifications.scheduleNotificationAsync({
         identifier: idFor(kind, weekday),
         content: {
-          title: kind === "in" ? "Waktunya absen masuk" : "Waktunya absen keluar",
+          title:
+            kind === "in"
+              ? `${LEAD_MINUTES} menit lagi absen masuk`
+              : `${LEAD_MINUTES} menit lagi absen keluar`,
           body:
             kind === "in"
-              ? `Shift Anda mulai ${h}:${m}. Ketuk untuk absen sekarang.`
-              : `Shift Anda selesai ${h}:${m}. Jangan lupa absen keluar.`,
+              ? `Shift Anda mulai ${time}. Ketuk untuk absen sekarang.`
+              : `Shift Anda selesai ${time}. Jangan lupa absen keluar.`,
           // the tab layout routes on this, same as a server push
           data: { route: "/absen" },
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
-          weekday,
-          hour: Number(h),
-          minute: Number(m),
+          ...alarmAt(time, weekday),
           channelId: CHANNEL,
         },
       });
