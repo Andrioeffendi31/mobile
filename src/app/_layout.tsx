@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useColorScheme } from "react-native";
-import { Redirect, Stack, usePathname } from "expo-router";
+import { Redirect, Stack, usePathname, type Href } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -38,7 +38,7 @@ export default function RootLayout() {
   const system = useColorScheme() === "dark" ? "dark" : "light";
   const { theme, ready } = usePrefs();
   const scheme = theme === "system" ? system : theme;
-  const { cookie, loading, restore } = useSession();
+  const { cookie, loading, onboarded, restore } = useSession();
   const pathname = usePathname();
 
   useEffect(() => {
@@ -52,8 +52,16 @@ export default function RootLayout() {
    * area under a dismissing sheet — flashes the other theme.
    */
   useEffect(() => {
-    void SystemUI.setBackgroundColorAsync(scheme === "dark" ? dark.bg : light.bg);
-  }, [scheme]);
+    void SystemUI.setBackgroundColorAsync(
+      pathname === "/onboarding"
+        ? scheme === "dark"
+          ? "#101827"
+          : "#f4f7fb"
+        : scheme === "dark"
+          ? dark.bg
+          : light.bg,
+    );
+  }, [pathname, scheme]);
 
   /**
    * QueryClientProvider outermost, above TamaguiProvider.
@@ -71,8 +79,15 @@ export default function RootLayout() {
     <TamaguiProvider config={tamaguiConfig} defaultTheme={scheme}>
       <Theme name={scheme}>
         <SafeAreaProvider>
-          <StatusBar style={scheme === "dark" ? "light" : "dark"} />
-          <Gate loading={loading || !ready} cookie={cookie} pathname={pathname} />
+          <StatusBar
+            style={scheme === "dark" ? "light" : "dark"}
+          />
+          <Gate
+            loading={loading || !ready}
+            cookie={cookie}
+            onboarded={onboarded}
+            pathname={pathname}
+          />
           <SchemeFade scheme={scheme} />
         </SafeAreaProvider>
       </Theme>
@@ -131,10 +146,12 @@ function SchemeFade({ scheme }: { scheme: "light" | "dark" }) {
 function Gate({
   loading,
   cookie,
+  onboarded,
   pathname,
 }: {
   loading: boolean;
   cookie: string | null;
+  onboarded: boolean;
   pathname: string;
 }) {
   /**
@@ -146,12 +163,26 @@ function Gate({
    */
   if (loading) return <YStack flex={1} backgroundColor="$bg" />;
 
+  const onOnboarding = pathname === "/onboarding";
   const onLogin = pathname === "/login";
-  if (!cookie && !onLogin) return <Redirect href="/login" />;
+  // Onboarding belongs to the signed-out state: every logout clears `onboarded`,
+  // so the welcome screen leads into the login screen again.
+  // The generated typed-route declaration is refreshed by Metro after a new
+  // route file appears; the cast keeps a clean standalone `tsc` run before that.
+  if (!cookie && !onboarded && !onOnboarding) {
+    return <Redirect href={"/onboarding" as Href} />;
+  }
+  if ((cookie || onboarded) && onOnboarding) {
+    return <Redirect href={cookie ? "/" : "/login"} />;
+  }
+  // …and only after it: without the guard /onboarding bounces to /login and the
+  // check above bounces it straight back, forever
+  if (!cookie && !onLogin && !onOnboarding) return <Redirect href="/login" />;
   if (cookie && onLogin) return <Redirect href="/" />;
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="onboarding" />
       <Stack.Screen name="login" />
       <Stack.Screen name="(tabs)" />
     </Stack>

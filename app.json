@@ -10,7 +10,7 @@
     "android": {
       "package": "co.id.nusantaradigital.ruanghr",
       "adaptiveIcon": {
-        "backgroundColor": "#4f46e5",
+        "backgroundColor": "#eaf2fd",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -38,7 +38,7 @@
       [
         "expo-notifications",
         {
-          "color": "#4f46e5",
+          "color": "#2f6fce",
           "defaultChannel": "default"
         }
       ],

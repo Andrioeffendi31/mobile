@@ -1,11 +1,10 @@
-import { Feather } from "@expo/vector-icons";
+import { Image } from "react-native";
 import Constants from "expo-constants";
 import * as Updates from "expo-updates";
 import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { ScrollView, Text, YStack } from "tamagui";
 import { type Bootstrap, get } from "@/api";
-import { tint } from "@/theme";
 import { Card, Group, Note, PageHeader, Row, Screen } from "@/ui";
 
 /**
@@ -43,7 +42,12 @@ export default function Tentang() {
             justifyContent="center"
             marginBottom={7}
           >
-            <Feather name="clock" size={21} color={tint("$accent")} />
+            <Image
+              source={require("../../../assets/logo-mark.png")}
+              style={{ width: 32, height: 32 }}
+              resizeMode="contain"
+              accessibilityLabel="Logo Ruang HR"
+            />
           </YStack>
           <Text fontSize={15} fontWeight="700" color="$fg">
             Ruang HR

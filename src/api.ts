@@ -38,6 +38,13 @@ type SessionState = {
   /** null while SecureStore is still being read, so the router does not bounce
    *  a logged-in user to /login on the first frame */
   loading: boolean;
+  /**
+   * Whether the welcome screen has been dismissed for *this* logged-out stretch.
+   * Deliberately not persisted and cleared on logout: onboarding introduces the
+   * app to whoever is about to sign in, so every sign-out earns it again.
+   */
+  onboarded: boolean;
+  finishOnboarding: () => void;
   set: (cookie: string | null) => Promise<void>;
   restore: () => Promise<void>;
 };
@@ -45,10 +52,12 @@ type SessionState = {
 export const useSession = create<SessionState>((set) => ({
   cookie: null,
   loading: true,
+  onboarded: false,
+  finishOnboarding: () => set({ onboarded: true }),
   async set(cookie) {
     if (cookie) await SecureStore.setItemAsync(SESSION_KEY, cookie);
     else await SecureStore.deleteItemAsync(SESSION_KEY);
-    set({ cookie });
+    set(cookie ? { cookie } : { cookie, onboarded: false });
   },
   async restore() {
     const cookie = await SecureStore.getItemAsync(SESSION_KEY).catch(() => null);
