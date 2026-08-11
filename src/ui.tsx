@@ -70,6 +70,12 @@ export const Input = styled(TInput, {
   borderRadius: 11,
   backgroundColor: "$surface",
   color: "$fg",
+  /**
+   * Tamagui leaves this prop unset, so an input falls back to the platform's own
+   * placeholder grey — ~#c7c7cd, which is 1.6:1 on white and invisible over the
+   * dark surface. `$placeholderColor` is the palette's own, 4.9:1 / 4.7:1.
+   */
+  placeholderTextColor: "$placeholderColor",
   fontSize: 13.5,
   paddingHorizontal: 13,
 });
@@ -81,6 +87,7 @@ export const TextArea = styled(TTextArea, {
   borderRadius: 11,
   backgroundColor: "$surface",
   color: "$fg",
+  placeholderTextColor: "$placeholderColor",
   fontSize: 13,
   paddingHorizontal: 13,
   paddingVertical: 10,
