@@ -10,9 +10,8 @@
     "android": {
       "package": "app.nanumhr",
       "adaptiveIcon": {
-        "backgroundColor": "#eaf2fd",
+        "backgroundColor": "#3767E8",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
@@ -38,7 +37,7 @@
       [
         "expo-notifications",
         {
-          "color": "#2f6fce",
+          "color": "#3767E8",
           "defaultChannel": "default"
         }
       ],

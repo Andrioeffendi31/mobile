@@ -122,12 +122,12 @@ export default function Onboarding() {
             borderRadius={11}
             alignItems="center"
             justifyContent="center"
-            backgroundColor={colors.blueSoft}
+            overflow="hidden"
           >
             <Image
               source={require("../../assets/logo-mark.png")}
-              style={{ width: 27, height: 27 }}
-              resizeMode="contain"
+              style={{ width: 36, height: 36 }}
+              resizeMode="cover"
               accessibilityLabel="Logo NanumHR"
             />
           </XStack>

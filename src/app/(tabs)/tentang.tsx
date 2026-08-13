@@ -37,15 +37,15 @@ export default function Tentang() {
             width={44}
             height={44}
             borderRadius={13}
-            backgroundColor="$accentSubtle"
             alignItems="center"
             justifyContent="center"
             marginBottom={7}
+            overflow="hidden"
           >
             <Image
               source={require("../../../assets/logo-mark.png")}
-              style={{ width: 32, height: 32 }}
-              resizeMode="contain"
+              style={{ width: 44, height: 44 }}
+              resizeMode="cover"
               accessibilityLabel="Logo NanumHR"
             />
           </YStack>

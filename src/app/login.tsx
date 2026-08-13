@@ -54,20 +54,36 @@ export default function Login() {
         showsVerticalScrollIndicator={false}
       >
         <YStack gap={16}>
+          <YStack
+            height={178}
+            borderRadius={20}
+            overflow="hidden"
+            borderWidth={1}
+            borderColor="$line"
+            marginBottom={6}
+          >
+            <Image
+              source={require("../../assets/login-banner.png")}
+              style={{ width: "100%", height: "100%" }}
+              resizeMode="cover"
+              accessibilityLabel="Tim Nanum berkolaborasi di ruang kerja"
+            />
+          </YStack>
+
           <YStack gap={4} marginBottom={8}>
             <XStack
               width={52}
               height={52}
               borderRadius={16}
-              backgroundColor="$accentSubtle"
               alignItems="center"
               justifyContent="center"
               marginBottom={12}
+              overflow="hidden"
             >
               <Image
                 source={require("../../assets/logo-mark.png")}
-                style={{ width: 38, height: 38 }}
-                resizeMode="contain"
+                style={{ width: 52, height: 52 }}
+                resizeMode="cover"
                 accessibilityLabel="Logo NanumHR"
               />
             </XStack>
@@ -76,6 +92,9 @@ export default function Login() {
             </Text>
             <Text fontSize={13.5} color="$fgMuted">
               Masuk dengan akun NanumHR Anda.
+            </Text>
+            <Text fontSize={10.5} color="$fgSubtle" marginTop={2}>
+              PT. NANUM INDAH SEJATI · 나눔컨설팅
             </Text>
           </YStack>
 
