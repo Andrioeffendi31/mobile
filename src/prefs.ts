@@ -75,7 +75,7 @@ export const usePrefs = create<PrefsState>()(
       ready: false,
     }),
     {
-      name: "ruanghr.prefs",
+      name: "nanumhr.prefs",
       storage,
       // `ready` describes this process, not the user's choice — persisting it
       // would restore a stale "already hydrated" on the next launch

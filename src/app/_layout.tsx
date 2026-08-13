@@ -4,7 +4,11 @@ import { Redirect, Stack, usePathname, type Href } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQuery,
+} from "@tanstack/react-query";
 import { TamaguiProvider, Theme, YStack } from "tamagui";
 // side-effect import: TaskManager.defineTask has to run during app init, because
 // the OS can launch this bundle headlessly to deliver a background location
@@ -14,7 +18,7 @@ import "@/background-ping";
 // React treats as a render error and Android reports as a force close — see the
 // Beranda header gradient.
 import "@tamagui/native/setup-expo-linear-gradient";
-import { useSession } from "@/api";
+import { type Bootstrap, get, useSession } from "@/api";
 import { usePrefs } from "@/prefs";
 import { dark, light, tamaguiConfig } from "../../tamagui.config";
 
@@ -181,10 +185,42 @@ function Gate({
   if (cookie && onLogin) return <Redirect href="/" />;
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="onboarding" />
-      <Stack.Screen name="login" />
-      <Stack.Screen name="(tabs)" />
-    </Stack>
+    <>
+      <SandiGate cookie={cookie} pathname={pathname} />
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="onboarding" />
+        <Stack.Screen name="login" />
+        <Stack.Screen name="ganti-sandi" />
+        <Stack.Screen name="(tabs)" />
+      </Stack>
+    </>
   );
+}
+
+/**
+ * An account still on the password HR handed out at the import gets no further
+ * than the screen that replaces it.
+ *
+ * Split out of Gate rather than folded into it, because it must not block: this
+ * reads the same ["me"] query every tab already issues, so it costs no extra
+ * request, but it answers a frame or two later than the session cookie does.
+ * Rendering the Stack meanwhile and redirecting when the answer arrives keeps
+ * launch instant for the 99% who have already chosen their own password.
+ */
+function SandiGate({
+  cookie,
+  pathname,
+}: {
+  cookie: string | null;
+  pathname: string;
+}) {
+  const me = useQuery({
+    queryKey: ["me"],
+    queryFn: () => get<Bootstrap>("/api/me"),
+    enabled: Boolean(cookie),
+  });
+
+  if (!me.data?.profile.mustChangePassword) return null;
+  if (pathname === "/ganti-sandi") return null;
+  return <Redirect href={"/ganti-sandi" as Href} />;
 }

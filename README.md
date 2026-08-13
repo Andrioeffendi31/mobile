@@ -1,8 +1,8 @@
-# Ruang HR Mobile
+# NanumHR Mobile
 
 Aplikasi karyawan (Expo / React Native) untuk sistem yang sama dengan `../web`.
 Spesifikasi: [`../PRD-Mobile.md`](../PRD-Mobile.md), desain:
-[`../Ruang HR Lite Mobile.dc.html`](../Ruang%20HR%20Lite%20Mobile.dc.html).
+[`../NanumHR Lite Mobile.dc.html`](../NanumHR%20Lite%20Mobile.dc.html).
 
 ## Menjalankan
 
@@ -19,7 +19,7 @@ EXPO_PUBLIC_API_URL=https://hr.example.com npm start
 ```
 
 Login pakai akun karyawan mana pun dari seed — mis.
-`citra.maharani@nusantaradigital.co.id` / `securePass123`. Akun `hr_admin`
+`citra.maharani@nanumindahsejati.co.id` / `securePass123`. Akun `hr_admin`
 sengaja ditolak dengan pesan "gunakan versi web" (PRD-Mobile §4).
 
 ## Isi
@@ -44,7 +44,11 @@ sengaja ditolak dengan pesan "gunakan versi web" (PRD-Mobile §4).
 
 Nilainya **tidak** ada di repo ini. Setiap profil menunjuk ke sebuah environment
 EAS lewat field `environment`, dan variabelnya hidup di
-[dashboard Expo](https://expo.dev/accounts/andrioeffendi31/projects/ruang-hr-mobile/environment-variables) —
+[dashboard Expo](https://expo.dev/accounts/andrioeffendi31/projects/nanumhr-mobile/environment-variables) —
+> Proyek EAS-nya baru (`@andrioeffendi31/nanumhr-mobile`,
+> `9a34e6ee-33ce-44ea-af59-7aca2774af79`), jadi URL di atas sudah cocok. `EXPO_PUBLIC_API_URL`
+> sudah diisi untuk environment `preview` dan `production`; `development` sengaja dibiarkan
+> kosong supaya `resolveBase()` di `src/api.ts` memakai host Metro untuk dev di LAN.
 jadi mengganti backend tidak perlu commit. Untuk memakainya di mesin lokal:
 
 ```sh
@@ -79,7 +83,7 @@ Anda — ini satu-satunya bagian yang tidak bisa disiapkan dari sini.
 
 1. [console.firebase.google.com](https://console.firebase.google.com) → buat
    project (atau pakai yang ada) → **Add app › Android**.
-2. Package name **harus** `co.id.nusantaradigital.ruanghr`.
+2. Package name **harus** `app.nanumhr` (lihat `app.json` → `expo.android.package`).
 3. Unduh `google-services.json`, taruh di `mobile/google-services.json`.
    (`app.json` sudah menunjuk ke path itu; file ini bukan rahasia, aman
    di-commit — dan **harus** ikut ter-commit, karena `eas build` mengunggah

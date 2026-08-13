@@ -1,14 +1,14 @@
 {
   "expo": {
-    "name": "Ruang HR",
-    "slug": "ruang-hr-mobile",
-    "scheme": "ruanghr",
+    "name": "NanumHR",
+    "slug": "nanumhr-mobile",
+    "scheme": "nanumhr",
     "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "android": {
-      "package": "co.id.nusantaradigital.ruanghr",
+      "package": "app.nanumhr",
       "adaptiveIcon": {
         "backgroundColor": "#eaf2fd",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -45,8 +45,8 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Ruang HR memakai lokasi Anda untuk memastikan absen masuk/keluar dilakukan di area kantor.",
-          "locationAlwaysAndWhenInUsePermission": "Ruang HR mencatat lokasi tiap ~3 jam selama Anda masih absen masuk, sebagai catatan kehadiran untuk HR. Perekaman berhenti saat Anda absen keluar.",
+          "locationWhenInUsePermission": "NanumHR memakai lokasi Anda untuk memastikan absen masuk/keluar dilakukan di area kantor.",
+          "locationAlwaysAndWhenInUsePermission": "NanumHR mencatat lokasi tiap ~3 jam selama Anda masih absen masuk, sebagai catatan kehadiran untuk HR. Perekaman berhenti saat Anda absen keluar.",
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
         }
@@ -54,7 +54,7 @@
       [
         "expo-image-picker",
         {
-          "cameraPermission": "Ruang HR memakai kamera untuk foto selfie sebagai bukti absen."
+          "cameraPermission": "NanumHR memakai kamera untuk foto selfie sebagai bukti absen."
         }
       ],
       "@react-native-community/datetimepicker",
@@ -66,7 +66,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "60433b17-9324-4ff4-b16c-fb7f41110991"
+        "projectId": "9a34e6ee-33ce-44ea-af59-7aca2774af79"
       }
     },
     "owner": "andrioeffendi31",
@@ -77,8 +77,10 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/60433b17-9324-4ff4-b16c-fb7f41110991"
+      "url": "https://u.expo.dev/9a34e6ee-33ce-44ea-af59-7aca2774af79"
     },
-    "ios": {}
+    "ios": {
+      "bundleIdentifier": "app.nanumhr"
+    }
   }
 }

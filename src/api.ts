@@ -16,7 +16,7 @@ import { create } from "zustand";
  */
 
 /** exported so the background location task can read the session without React */
-export const SESSION_KEY = "ruanghr.session";
+export const SESSION_KEY = "nanumhr.session";
 
 /**
  * Where the API lives. In a dev build there is no baked-in host, so derive it
@@ -220,6 +220,23 @@ export type Bootstrap = {
     position: string;
     role: "hr_admin" | "manager" | "employee";
     photoKey: string | null;
+    /** The rest of the employee record, for the Profil screen. Nullable across
+     *  the board: the employment half is filled in by HR after the import, and
+     *  the personal half has gaps in the source data. */
+    email: string;
+    birthPlace: string | null;
+    birthDate: string | null;
+    gender: "Laki-laki" | "Perempuan" | null;
+    religion: string | null;
+    address: string | null;
+    phone: string | null;
+    emergencyName: string | null;
+    emergencyPhone: string | null;
+    contractType: "Tetap" | "Kontrak" | null;
+    joinedAt: string | null;
+    workLocation: string;
+    /** still on the password HR handed out — the app sends them to /ganti-sandi */
+    mustChangePassword: boolean;
   };
   today: {
     date: string;

@@ -94,7 +94,7 @@ export async function registerForPush(): Promise<
   // Android 13+ refuses to hand out a token before a channel exists
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("default", {
-      name: "Pemberitahuan Ruang HR",
+      name: "Pemberitahuan NanumHR",
       importance: Notifications.AndroidImportance.DEFAULT,
     });
   }

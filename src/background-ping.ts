@@ -17,7 +17,7 @@ import { API, SESSION_KEY } from "@/api";
  * The task runs in a headless JS context with no React tree and no Zustand
  * store, so the session is read straight from SecureStore each time.
  */
-export const PING_TASK = "ruanghr.location-ping";
+export const PING_TASK = "nanumhr.location-ping";
 
 const THREE_HOURS = 3 * 60 * 60 * 1000;
 
@@ -91,7 +91,7 @@ export async function startBackgroundPing(): Promise<boolean> {
     // being tracked by your employer should be visible while it happens
     showsBackgroundLocationIndicator: true,
     foregroundService: {
-      notificationTitle: "Ruang HR mencatat lokasi",
+      notificationTitle: "NanumHR mencatat lokasi",
       notificationBody: "Aktif selama Anda masih absen masuk hari ini.",
       notificationColor: "#4f46e5",
       killServiceOnDestroy: false,

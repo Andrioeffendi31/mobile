@@ -128,12 +128,12 @@ export default function Onboarding() {
               source={require("../../assets/logo-mark.png")}
               style={{ width: 27, height: 27 }}
               resizeMode="contain"
-              accessibilityLabel="Logo Ruang HR"
+              accessibilityLabel="Logo NanumHR"
             />
           </XStack>
           <YStack gap={1}>
             <Text color={colors.ink} fontSize={14.5} fontWeight="700" letterSpacing={-0.25}>
-              Ruang HR
+              NanumHR
             </Text>
             <Text color={colors.muted} fontSize={9} letterSpacing={0.2}>
               by Nissi Tech Consulting

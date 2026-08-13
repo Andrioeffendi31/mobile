@@ -112,6 +112,7 @@ export default function TabLayout() {
           giving any of them a button of its own. */}
       <Tabs.Screen name="absen" options={{ href: null }} />
       <Tabs.Screen name="berkas" options={{ href: null }} />
+      <Tabs.Screen name="profil" options={{ href: null }} />
       <Tabs.Screen name="tentang" options={{ href: null }} />
     </Tabs>
       {/* above the tab bar, outside <Tabs> so it survives a tab switch */}

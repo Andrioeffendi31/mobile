@@ -92,7 +92,7 @@ export async function enrollPasskey() {
 
   const attestation = await Passkey.create({
     ...(options as unknown as Parameters<typeof Passkey.create>[0]),
-    rp: options.rp ?? { id: rpIdFromApi(), name: "Ruang HR" },
+    rp: options.rp ?? { id: rpIdFromApi(), name: "NanumHR" },
   });
 
   await postJson("/api/webauthn/register", {

@@ -133,5 +133,31 @@ export function menitAntara(startTime: string, endTime: string) {
   return diff >= 0 ? diff : diff + 24 * 60;
 }
 
+/** "0858-8182-0410". Same grouping as the web's lib/hr.ts — duplicated rather
+ *  than shared because mobile deliberately imports nothing from web/ (§10). */
+export function telepon(v: string | null | undefined) {
+  const d = (v ?? "").replace(/\D/g, "");
+  if (!d) return "—";
+  return d.match(/.{1,4}/g)!.join("-");
+}
+
+/** "11 Agustus 2002", or "—" when the field was never filled in. */
+export function tanggalOrDash(iso: string | null | undefined) {
+  if (!iso || !isIsoDate(iso)) return "—";
+  const d = utc(iso);
+  return `${d.getUTCDate()} ${BULAN[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+/** Whole years since a birth date. */
+export function umur(iso: string | null | undefined, today = todayWib()) {
+  if (!iso || !isIsoDate(iso)) return null;
+  const b = utc(iso);
+  const t = utc(today);
+  let years = t.getUTCFullYear() - b.getUTCFullYear();
+  const md = (d: Date) => (d.getUTCMonth() + 1) * 100 + d.getUTCDate();
+  if (md(t) < md(b)) years--;
+  return years;
+}
+
 export const isIsoDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
 export const isJam = (s: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(s);

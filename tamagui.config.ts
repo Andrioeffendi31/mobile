@@ -3,7 +3,7 @@ import { animationsReactNative } from "@tamagui/config/v5-rn";
 import { createTamagui } from "tamagui";
 
 /**
- * The mockup's CSS custom properties (`Ruang HR Lite Mobile.dc.html` :root),
+ * The mockup's CSS custom properties (`NanumHR Lite Mobile.dc.html` :root),
  * mapped into the Tamagui theme as PRD-Mobile §5 asks. tamagui.config.ts feeds
  * these straight in as theme values, so screens name colours (`"$surface"`,
  * `"$fgMuted"`) and this file is the only place a hex code appears.

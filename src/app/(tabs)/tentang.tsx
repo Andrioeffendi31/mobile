@@ -46,11 +46,11 @@ export default function Tentang() {
               source={require("../../../assets/logo-mark.png")}
               style={{ width: 32, height: 32 }}
               resizeMode="contain"
-              accessibilityLabel="Logo Ruang HR"
+              accessibilityLabel="Logo NanumHR"
             />
           </YStack>
           <Text fontSize={15} fontWeight="700" color="$fg">
-            Ruang HR
+            NanumHR
           </Text>
           <Text fontSize={12} color="$fgMuted" textAlign="center" lineHeight={18}>
             Absensi, cuti dan lembur untuk karyawan · versi {version}

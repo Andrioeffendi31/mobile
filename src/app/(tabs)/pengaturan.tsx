@@ -125,6 +125,15 @@ export default function Pengaturan() {
             this screen, and the one an employee actually comes looking for */}
         <Group label="Berkas & data">
           <Row
+            icon="user"
+            iconFg="$accent"
+            iconBg="$accentSubtle"
+            label="Profil saya"
+            note="Data pribadi, kepegawaian, dan kontak darurat"
+            chevron
+            onPress={() => router.push("/profil")}
+          />
+          <Row
             icon="folder"
             iconFg="$info"
             iconBg="$infoSubtle"
@@ -143,6 +152,15 @@ export default function Pengaturan() {
           {/* gated by the caller, not by the row: a row that renders null inside
               a Group would leave its divider behind */}
           {passkeyAvailable() ? <PasskeyRow ids={me.data?.passkeys ?? []} /> : null}
+          <Row
+            icon="lock"
+            iconFg="$fgMuted"
+            iconBg="$inset"
+            label="Ganti kata sandi"
+            note="Berlaku juga untuk masuk lewat web"
+            chevron
+            onPress={() => router.push("/ganti-sandi")}
+          />
           <Row
             icon="map-pin"
             iconFg={trail.data ? "$success" : "$fgMuted"}
@@ -365,7 +383,7 @@ function Notifikasi({ shift }: { shift?: Bootstrap["shift"] }) {
         <Row
           icon="settings"
           label="Buka setelan perangkat"
-          note="Izinkan pemberitahuan untuk Ruang HR"
+          note="Izinkan pemberitahuan untuk NanumHR"
           chevron
           onPress={() => Linking.openSettings()}
         />

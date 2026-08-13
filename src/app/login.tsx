@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMutation } from "@tanstack/react-query";
 import { Text, XStack, YStack } from "tamagui";
 import { API, login } from "@/api";
+import * as Linking from "expo-linking";
 import { available, loginWithPasskey } from "@/passkey";
 import { Btn, Field, Input, Note, Screen, useKeyboardHeight } from "@/ui";
 
@@ -67,14 +68,14 @@ export default function Login() {
                 source={require("../../assets/logo-mark.png")}
                 style={{ width: 38, height: 38 }}
                 resizeMode="contain"
-                accessibilityLabel="Logo Ruang HR"
+                accessibilityLabel="Logo NanumHR"
               />
             </XStack>
             <Text fontSize={24} fontWeight="700" color="$fg">
-              Ruang HR
+              NanumHR
             </Text>
             <Text fontSize={13.5} color="$fgMuted">
-              Masuk dengan akun Ruang HR Anda.
+              Masuk dengan akun NanumHR Anda.
             </Text>
           </YStack>
 
@@ -82,7 +83,7 @@ export default function Login() {
             <Input
               value={email}
               onChangeText={setEmail}
-              placeholder="nama@nusantaradigital.co.id"
+              placeholder="nama@nanumindahsejati.co.id"
               autoCapitalize="none"
               autoComplete="email"
               keyboardType="email-address"
@@ -118,6 +119,19 @@ export default function Login() {
           >
             {masuk.isPending ? "Memeriksa…" : "Masuk"}
           </Btn>
+
+          {/* Opens the web page rather than duplicating the flow natively: the
+              reset is driven by an emailed link, so the phone would only be
+              rebuilding a form the browser already has, for a once-a-year action. */}
+          <Text
+            fontSize={12.5}
+            color="$fgMuted"
+            textAlign="center"
+            marginTop={2}
+            onPress={() => void Linking.openURL(`${API}/lupa-sandi`)}
+          >
+            Lupa kata sandi?
+          </Text>
 
           {bisaPasskey ? (
             <>
