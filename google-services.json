@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "510728312771",
+    "project_id": "nanum-hr",
+    "storage_bucket": "nanum-hr.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:510728312771:android:306bf4d3c29e051e448f76",
+        "android_client_info": {
+          "package_name": "app.nanumhr"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA3RlozWfjFUCRf2ORT1MBGlnX8VcYe5L8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

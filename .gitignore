@@ -49,4 +49,8 @@ yarn-error.*
 # it would silently strip Firebase out of every build again.
 fcm-service-account.json
 *service-account*.json
+# Google menamai unduhannya <proyek>-firebase-adminsdk-<acak>.json — tidak memuat
+# kata "service-account", jadi pola di atas melewatkannya dan kunci privat itu
+# nyaris ikut ter-commit. Cocokkan nama bawaannya juga.
+*adminsdk*.json
 api-*-*.json
