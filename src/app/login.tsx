@@ -54,22 +54,6 @@ export default function Login() {
         showsVerticalScrollIndicator={false}
       >
         <YStack gap={16}>
-          <YStack
-            height={178}
-            borderRadius={20}
-            overflow="hidden"
-            borderWidth={1}
-            borderColor="$line"
-            marginBottom={6}
-          >
-            <Image
-              source={require("../../assets/login-banner.png")}
-              style={{ width: "100%", height: "100%" }}
-              resizeMode="cover"
-              accessibilityLabel="Tim Nanum berkolaborasi di ruang kerja"
-            />
-          </YStack>
-
           <YStack gap={4} marginBottom={8}>
             <XStack
               width={52}

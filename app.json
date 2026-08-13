@@ -35,6 +35,19 @@
       "expo-status-bar",
       "expo-secure-store",
       [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#3767E8",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "dark": {
+            "backgroundColor": "#3767E8",
+            "image": "./assets/splash-icon.png"
+          }
+        }
+      ],
+      [
         "expo-notifications",
         {
           "color": "#3767E8",
