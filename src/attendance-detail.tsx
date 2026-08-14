@@ -135,6 +135,16 @@ function Day({ day }: { day: AttendanceDay }) {
         <Clock label="Absen keluar" value={day.out} />
       </XStack>
 
+      {/* Kalau hari ini tercatat tanpa keterangan padahal Anda sudah mengajukan izin,
+          alasan penolakannya ada di sini, bukan hanya di riwayat pengajuan. */}
+      {day.ditolak ? (
+        <Note
+          fg="$warning"
+          bg="$warningSubtle"
+          text={`Pengajuan ${day.ditolak.type.toLowerCase()} (${day.ditolak.startDate} s/d ${day.ditolak.endDate}) ditolak.${day.ditolak.note ? ` ${day.ditolak.note}` : ""}`}
+        />
+      ) : null}
+
       {day.location ? <Readout label="Lokasi tercatat" value={day.location} /> : null}
       {/* which geofence the day was judged against — the trail's distances below
           are measured from this point, not from wherever is nearest today */}

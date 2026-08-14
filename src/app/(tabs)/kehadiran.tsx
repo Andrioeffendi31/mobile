@@ -63,6 +63,11 @@ export default function Kehadiran() {
           <Stat label="Hadir" value={q.data?.stats.hadir ?? 0} />
           <Stat label="Terlambat" value={q.data?.stats.telat ?? 0} color="$warning" />
           <Stat label="Cuti / izin" value={q.data?.stats.cuti ?? 0} color="$fgMuted" />
+          <Stat
+            label="Tanpa ket."
+            value={q.data?.stats.tanpaKeterangan ?? 0}
+            color="$danger"
+          />
         </XStack>
 
         {/* A horizontal chip rail instead of tamagui's <Select>: Select on native

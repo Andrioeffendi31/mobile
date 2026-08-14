@@ -19,7 +19,11 @@ export const ATT = {
   cuti: { label: "Cuti", fg: "$fgMuted", bg: "$inset" },
   izin: { label: "Izin", fg: "$fgMuted", bg: "$inset" },
   sakit: { label: "Sakit", fg: "$info", bg: "$infoSubtle" },
-  belum_absen: { label: "Belum absen", fg: "$danger", bg: "$dangerSubtle" },
+  belum_absen: { label: "Belum absen", fg: "$warning", bg: "$warningSubtle" },
+  /** hari kerja yang sudah lewat tanpa absen dan tanpa izin yang disetujui */
+  tanpa_keterangan: { label: "Tanpa keterangan", fg: "$danger", bg: "$dangerSubtle" },
+  /** bukan hari kerja divisinya, atau libur nasional — bukan tuduhan apa pun */
+  libur: { label: "Libur", fg: "$fgMuted", bg: "$inset" },
 } as const;
 
 export const REQ = {

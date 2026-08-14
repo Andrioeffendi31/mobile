@@ -37,9 +37,11 @@ const group = (status: string): Filter =>
     ? "hadir"
     : status === "telat"
       ? "telat"
-      : status === "belum_absen"
+      : status === "belum_absen" || status === "tanpa_keterangan"
         ? "belum"
-        : "izin";
+        : // "libur" ikut ember izin, bukan "belum": hari libur divisinya bukan
+          // sesuatu yang perlu ditindaklanjuti siapa pun
+          "izin";
 
 /**
  * "Kehadiran Tim" (PRD-Mobile §6.4). Search and filter run on the phone: the

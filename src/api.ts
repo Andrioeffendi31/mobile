@@ -280,6 +280,9 @@ export type AttendanceDay = {
   shift: { start: string; end: string };
   /** which office the day was measured against; null on a WFH day */
   office: string | null;
+  /** pengajuan cuti yang ditolak dan mencakup hari ini — yang membedakan "tidak
+   *  pernah minta izin" dari "sudah minta, ditolak, tetap tidak masuk" */
+  ditolak: { type: string; startDate: string; endDate: string; note: string | null } | null;
   /** the same office as a point, for the map; null on a WFH day */
   officeGeo: { lat: number; lng: number; radiusM: number } | null;
   events: {
@@ -298,7 +301,7 @@ export type AttendanceDay = {
 
 export type AttendanceMonth = {
   month: string;
-  stats: { hadir: number; telat: number; cuti: number };
+  stats: { hadir: number; telat: number; cuti: number; tanpaKeterangan: number };
   days: {
     date: string;
     status: string;
