@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { AppState, useColorScheme } from "react-native";
 import { Redirect, Stack, usePathname, type Href } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -26,9 +26,9 @@ import {
 // Beranda header gradient.
 import "@tamagui/native/setup-expo-linear-gradient";
 import { type Bootstrap, get, useSession } from "@/api";
+import { IzinLokasi, useIzinLokasi } from "@/izin-lokasi";
 import { IzinNotifikasi } from "@/izin-notifikasi";
 import { usePrefs } from "@/prefs";
-import { toast } from "@/toast";
 import { dark, light, tamaguiConfig } from "../../tamagui.config";
 
 const queryClient = new QueryClient({
@@ -212,10 +212,20 @@ function Gate({
    * permintaan izin untuk aplikasi yang belum pernah ia lihat isinya hanya
    * memperbesar angka penolakan — sedangkan penolakan di Android 13 itu permanen.
    *
-   * IzinNotifikasi merender <Stack> hanya kalau izinnya ada, bukan me-redirect ke
-   * sebuah rute, jadi tidak ada halaman di belakangnya yang bisa dituju deep link.
+   * Keduanya merender <Stack> hanya kalau izinnya ada, bukan me-redirect ke sebuah
+   * rute, jadi tidak ada halaman di belakangnya yang bisa dituju deep link.
+   *
+   * Notifikasi dulu, lokasi kemudian: yang pertama dijawab satu ketukan, yang kedua
+   * mengantar ke Pengaturan sistem. Menaruh yang panjang di depan membuat orang
+   * bolak-balik ke Pengaturan sebelum sempat melihat aplikasinya sekali pun.
    */
-  return cookie ? <IzinNotifikasi>{isi}</IzinNotifikasi> : isi;
+  return cookie ? (
+    <IzinNotifikasi>
+      <IzinLokasi>{isi}</IzinLokasi>
+    </IzinNotifikasi>
+  ) : (
+    isi
+  );
 }
 
 /**
@@ -270,41 +280,49 @@ function Trail({ cookie }: { cookie: string | null }) {
   const clockedIn = Boolean(
     cookie && me.data?.today.clockIn && !me.data.today.clockOut,
   );
+  // izin yang baru diberikan harus menyalakan layanannya saat itu juga, bukan pada
+  // peluncuran berikutnya — lihat komentar di useIzinLokasi
+  const bolehLokasi = useIzinLokasi((s) => s.boleh);
+
+  /**
+   * Satu fungsi, dua pemanggil: efek di bawah (peluncuran dan tiap perubahan
+   * keadaan absen) dan listener AppState. Dipakai bersama karena keduanya menjawab
+   * pertanyaan yang sama — "apakah layanannya seharusnya hidup sekarang?" — dan
+   * karena izin lokasi bisa berubah di Pengaturan sistem tanpa satu pun state React
+   * di sini ikut berubah: tanpa jalur AppState, izin yang baru saja diberikan tidak
+   * akan menyalakan apa pun sampai aplikasinya ditutup dan dibuka lagi.
+   */
+  const rukun = useCallback(async () => {
+    if (!clockedIn) {
+      await stopBackgroundPing();
+      if (!cookie) await clearQueue();
+      return;
+    }
+    /**
+     * Dipanggil tanpa syarat, bukan hanya ketika izinnya belum ada.
+     * `canPingInBackground()` hanya membaca IZIN, sedangkan yang perlu dipastikan
+     * adalah LAYANANNYA hidup — dan sesudah force-stop izinnya masih ada
+     * sementara layanannya sudah mati. Menjadikan izin sebagai penjaga berarti
+     * satu-satunya kasus yang paling perlu dipulihkan justru dilewati.
+     *
+     * Aman diulang: startBackgroundPing berhenti lebih awal kalau task-nya sudah
+     * jalan, dan yang tersisa hanya menyegarkan kalimat di notifikasi.
+     *
+     * Tidak ada toast saat izinnya belum ada: IzinLokasi yang menangani percakapan
+     * itu, dengan layar yang bisa ditindaklanjuti — toast di belakang gerbangnya
+     * hanya mengulang keluhan tanpa menawarkan jalan keluar.
+     */
+    if (!(await startBackgroundPing(me.data?.today.clockIn?.slice(0, 5) ?? "")))
+      return;
+    // Peluncuran dingin tidak pernah memicu AppState "change" — keadaannya sudah
+    // aktif sejak awal. Tanpa baris ini, membuka aplikasi setelah force-stop
+    // hanya menyalakan ulang penjadwalnya dan menunggu tiga jam lagi.
+    await catchUpPing();
+  }, [clockedIn, cookie, me.data?.today.clockIn, bolehLokasi]);
 
   useEffect(() => {
-    let batal = false;
-    (async () => {
-      if (!clockedIn) {
-        await stopBackgroundPing();
-        if (!cookie) await clearQueue();
-        return;
-      }
-      /**
-       * Dipanggil tanpa syarat, bukan hanya ketika izinnya belum ada.
-       * `canPingInBackground()` hanya membaca IZIN, sedangkan yang perlu dipastikan
-       * adalah LAYANANNYA hidup — dan sesudah force-stop izinnya masih ada
-       * sementara layanannya sudah mati. Menjadikan izin sebagai penjaga berarti
-       * satu-satunya kasus yang paling perlu dipulihkan justru dilewati.
-       *
-       * Aman diulang: startBackgroundPing berhenti lebih awal kalau task-nya sudah
-       * jalan, dan yang tersisa hanya menyegarkan kalimat di notifikasi.
-       */
-      const ok = await startBackgroundPing(
-        me.data?.today.clockIn?.slice(0, 5) ?? "",
-      );
-      if (!ok && !batal) {
-        toast("Izin lokasi latar belakang ditolak · jejak lokasi tidak tercatat");
-        return;
-      }
-      // Peluncuran dingin tidak pernah memicu AppState "change" — keadaannya sudah
-      // aktif sejak awal. Tanpa baris ini, membuka aplikasi setelah force-stop
-      // hanya menyalakan ulang penjadwalnya dan menunggu tiga jam lagi.
-      await catchUpPing();
-    })();
-    return () => {
-      batal = true;
-    };
-  }, [clockedIn, cookie, me.data?.today.clockIn]);
+    void rukun();
+  }, [rukun]);
 
   /**
    * Kembali ke depan adalah satu-satunya pemulihan yang tersedia setelah
@@ -317,10 +335,13 @@ function Trail({ cookie }: { cookie: string | null }) {
       if (state !== "active" || !cookie) return;
       // clock-out bisa terjadi di konsol web selagi telepon tidur
       void qc.invalidateQueries({ queryKey: ["me"] });
-      void catchUpPing();
+      // rukun(), bukan catchUpPing() saja: kembali dari Pengaturan sistem dengan
+      // izin yang baru diberikan harus menyalakan layanannya, bukan cuma mengirim
+      // satu fix susulan yang tidak akan pernah punya penerus.
+      void rukun();
     });
     return () => sub.remove();
-  }, [cookie, qc]);
+  }, [cookie, qc, rukun]);
 
   return null;
 }
