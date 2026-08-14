@@ -8,14 +8,8 @@ import { LinearGradient } from "@tamagui/linear-gradient";
 import { ScrollView, Text, XStack, YStack } from "tamagui";
 import { type Bootstrap, get } from "@/api";
 import { Pengumuman } from "@/announcements";
-import {
-  canPingInBackground,
-  startBackgroundPing,
-  stopBackgroundPing,
-} from "@/background-ping";
 import { durasiJam, jamWib, sapaan, tanggalPanjang } from "@/format";
 import { HEADER_GRADIENT, tint } from "@/theme";
-import { toast } from "@/toast";
 import {
   Avatar,
   Btn,
@@ -44,33 +38,6 @@ export default function Beranda() {
 
   const data = me.data;
   const clockedIn = Boolean(data?.today.clockIn && !data.today.clockOut);
-
-  /**
-   * Start/stop the 3-hourly location trail with the working day (PRD-Mobile §6.1
-   * follow-on). The task itself lives in src/background-ping.ts and keeps running
-   * with the app closed; this effect only mirrors the clock-in state onto it. The
-   * trail's first point is the punch itself — /api/me/clock already writes the
-   * `masuk` event with coordinates — so the task only has to cover the hours
-   * after. A refused background permission is reported once, not nagged: clock-in
-   * still works without it.
-   */
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!clockedIn) {
-        await stopBackgroundPing();
-        return;
-      }
-      if (await canPingInBackground()) return;
-      const ok = await startBackgroundPing();
-      if (!ok && !cancelled) {
-        toast("Izin lokasi latar belakang ditolak · jejak lokasi tidak tercatat");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [clockedIn]);
 
   if (me.isPending) return <BerandaSkeleton />;
   if (me.isError || !data) {

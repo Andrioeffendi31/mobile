@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "@tamagui/linear-gradient";
 import { Image, ScrollView, Text, XStack, YStack } from "tamagui";
 import { type Bootstrap, type Office, get, postForm } from "@/api";
+import { stopBackgroundPing } from "@/background-ping";
 import { formatJarak, jamWib, tanggalPanjang, jarakMeter } from "@/format";
 import { canProcessImages, toWebp } from "@/image";
 import { Peta } from "@/peta";
@@ -48,7 +49,14 @@ import {
  * be a punch that fails on submit after the employee thought they were done.
  */
 
-type Fix = { lat: number; lng: number; label?: string };
+type Fix = {
+  lat: number;
+  lng: number;
+  label?: string;
+  /** Android melaporkan sendiri fix yang berasal dari mock location provider,
+   *  yaitu dari aplikasi fake-GPS. Server yang menolak punch-nya. */
+  mocked?: boolean;
+};
 
 /** 3:4 portrait, 720px wide — enough for HR to recognise a face, small in R2. */
 const SELFIE_RATIO = 3 / 4;
@@ -101,6 +109,7 @@ export default function Absen() {
       setFix({
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
+        mocked: pos.mocked,
         label: place
           ? [place.street, place.district ?? place.city].filter(Boolean).join(", ")
           : undefined,
@@ -211,6 +220,10 @@ export default function Absen() {
       form.append("lat", String(fix.lat));
       form.append("lng", String(fix.lng));
       if (fix.label) form.append("location", fix.label);
+      // Dikirim apa adanya dan ditolak di server, bukan dicegat di sini: penolakan
+      // yang hanya hidup di telepon adalah penolakan yang bisa dihapus dari telepon,
+      // dan percobaannya perlu tercatat di tempat yang tidak dipegang pelakunya.
+      if (fix.mocked) form.append("mocked", "1");
       if (wfh) form.append("wfh", "1");
       // only on the way in — the server reads clock-out's office off the row and
       // ignores anything sent here
@@ -230,6 +243,9 @@ export default function Absen() {
       );
     },
     onSuccess: async (res) => {
+      // Berhenti seketika, bukan menunggu ["me"] menyegarkan diri: persis pada detik
+      // ini notifikasi "NanumHR mencatat lokasi" sedang dilihat orangnya.
+      if (action === "out") await stopBackgroundPing();
       await qc.invalidateQueries();
       toast(
         action === "in"

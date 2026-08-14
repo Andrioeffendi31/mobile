@@ -274,6 +274,14 @@ function Day({ day }: { day: AttendanceDay }) {
                         {e.note}
                       </Text>
                     ) : null}
+                    {/* Karyawan melihat tandanya juga, bukan cuma HR: catatan yang
+                        menuduh seseorang tanpa ia pernah tahu bukan catatan yang
+                        bisa ia bantah. */}
+                    {e.suspect ? (
+                      <Text fontSize={12.5} color="$danger" fontWeight="500" lineHeight={18}>
+                        {e.suspect}
+                      </Text>
+                    ) : null}
                   </YStack>
                 </XStack>
               );

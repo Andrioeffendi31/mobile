@@ -291,6 +291,8 @@ export type AttendanceDay = {
     at: string;
     location: string | null;
     note: string | null;
+    /** kenapa titik ini patut dicurigai (mis. GPS palsu), atau null kalau bersih */
+    suspect: string | null;
     photoKey: string | null;
     distanceM: number | null;
     /** null on rows written before coordinates were kept */

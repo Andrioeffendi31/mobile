@@ -174,6 +174,34 @@ export default function Pengaturan() {
             chevron
             onPress={() => Linking.openSettings()}
           />
+          {/*
+            Separuh jawaban lain atas "kenapa jejak saya bolong": ROM Xiaomi, Oppo
+            dan Vivo mematikan layanan latar belakang secara agresif, dan tidak ada
+            API yang bisa mencegahnya dari dalam aplikasi.
+
+            Intent daftar sistem, bukan REQUEST_IGNORE_BATTERY_OPTIMIZATIONS: yang
+            terakhir butuh izin bernama sama yang masuk daftar terbatas Play Store,
+            dan aplikasi yang sudah memegang ACCESS_BACKGROUND_LOCATION tidak perlu
+            bendera kedua demi satu dialog yang dua ketukan lagi juga sampai.
+
+            Activity "autostart" bawaan OEM sengaja tidak di-hardcode: namanya tidak
+            terdokumentasi, berbeda antar versi ROM, dan sendIntent melempar kalau
+            activity-nya tidak ada. Kalimat di bawah lebih tahan lama daripada
+            intent yang rusak pada pembaruan MIUI berikutnya.
+          */}
+          <Row
+            icon="battery-charging"
+            iconFg="$fgMuted"
+            iconBg="$inset"
+            label="Izinkan berjalan di latar belakang"
+            note="Matikan penghemat baterai untuk NanumHR, dan nyalakan “Autostart / Mulai otomatis” di aplikasi keamanan bawaan ponsel"
+            chevron
+            onPress={() =>
+              Linking.sendIntent(
+                "android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS",
+              ).catch(() => Linking.openSettings())
+            }
+          />
         </Group>
 
         <Group label="Tentang">

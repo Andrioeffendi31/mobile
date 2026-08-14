@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useColorScheme } from "react-native";
+import { AppState, useColorScheme } from "react-native";
 import { Redirect, Stack, usePathname, type Href } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
@@ -8,18 +8,28 @@ import {
   QueryClient,
   QueryClientProvider,
   useQuery,
+  useQueryClient,
 } from "@tanstack/react-query";
 import { TamaguiProvider, Theme, YStack } from "tamagui";
-// side-effect import: TaskManager.defineTask has to run during app init, because
-// the OS can launch this bundle headlessly to deliver a background location
-import "@/background-ping";
+// Importing this module at all is what runs TaskManager.defineTask, and that has
+// to happen during app init: the OS can launch this bundle headlessly to deliver
+// a background location, with no React tree mounted to do it later.
+import {
+  canPingInBackground,
+  catchUpPing,
+  clearQueue,
+  startBackgroundPing,
+  stopBackgroundPing,
+} from "@/background-ping";
 // side-effect import: hands expo-linear-gradient to Tamagui's <LinearGradient>.
 // Without it the native wrapper returns undefined instead of a component, which
 // React treats as a render error and Android reports as a force close — see the
 // Beranda header gradient.
 import "@tamagui/native/setup-expo-linear-gradient";
 import { type Bootstrap, get, useSession } from "@/api";
+import { IzinNotifikasi } from "@/izin-notifikasi";
 import { usePrefs } from "@/prefs";
+import { toast } from "@/toast";
 import { dark, light, tamaguiConfig } from "../../tamagui.config";
 
 const queryClient = new QueryClient({
@@ -92,6 +102,7 @@ export default function RootLayout() {
             onboarded={onboarded}
             pathname={pathname}
           />
+          <Trail cookie={cookie} />
           <SchemeFade scheme={scheme} />
         </SafeAreaProvider>
       </Theme>
@@ -184,7 +195,7 @@ function Gate({
   if (!cookie && !onLogin && !onOnboarding) return <Redirect href="/login" />;
   if (cookie && onLogin) return <Redirect href="/" />;
 
-  return (
+  const isi = (
     <>
       <SandiGate cookie={cookie} pathname={pathname} />
       <Stack screenOptions={{ headerShown: false }}>
@@ -195,6 +206,17 @@ function Gate({
       </Stack>
     </>
   );
+
+  /**
+   * Izin notifikasi diminta sesudah login, bukan sebelumnya: onboarding dan layar
+   * login sampai di baris ini juga (tanpa cookie), dan menghadang orang dengan
+   * permintaan izin untuk aplikasi yang belum pernah ia lihat isinya hanya
+   * memperbesar angka penolakan — sedangkan penolakan di Android 13 itu permanen.
+   *
+   * IzinNotifikasi merender <Stack> hanya kalau izinnya ada, bukan me-redirect ke
+   * sebuah rute, jadi tidak ada halaman di belakangnya yang bisa dituju deep link.
+   */
+  return cookie ? <IzinNotifikasi>{isi}</IzinNotifikasi> : isi;
 }
 
 /**
@@ -223,4 +245,73 @@ function SandiGate({
   if (!me.data?.profile.mustChangePassword) return null;
   if (pathname === "/ganti-sandi") return null;
   return <Redirect href={"/ganti-sandi" as Href} />;
+}
+
+/**
+ * Menyalakan dan mematikan jejak lokasi bersama hari kerja.
+ *
+ * Dulu efek ini tinggal di tab Beranda, yang berarti ia hanya berjalan kalau tab
+ * itu kebetulan ter-mount — sebuah kebetulan routing, bukan jaminan. Di sini ia
+ * berjalan pada setiap peluncuran, dan sengaja BERADA DI LUAR `Gate`: ia harus
+ * tetap hidup ketika cookie menjadi null, karena logout adalah salah satu momen
+ * yang wajib menghentikan layanannya. Sebelum ini, ponsel yang sudah logout masih
+ * menampilkan notifikasi "NanumHR mencatat lokasi" sampai wake-up berikutnya.
+ *
+ * Menghentikannya di sini, bukan di dalam `keluar()` atau `logout()`: yang di sana
+ * hanya menutup satu jalan keluar, sedangkan ini menangkap semuanya — termasuk
+ * logout otomatis saat sesi ditolak 401 di tengah request.
+ */
+function Trail({ cookie }: { cookie: string | null }) {
+  const qc = useQueryClient();
+  const me = useQuery({
+    queryKey: ["me"],
+    queryFn: () => get<Bootstrap>("/api/me"),
+    enabled: Boolean(cookie),
+  });
+  const clockedIn = Boolean(
+    cookie && me.data?.today.clockIn && !me.data.today.clockOut,
+  );
+
+  useEffect(() => {
+    let batal = false;
+    (async () => {
+      if (!clockedIn) {
+        await stopBackgroundPing();
+        if (!cookie) await clearQueue();
+        return;
+      }
+      if (!(await canPingInBackground())) {
+        const ok = await startBackgroundPing();
+        if (!ok && !batal) {
+          toast("Izin lokasi latar belakang ditolak · jejak lokasi tidak tercatat");
+          return;
+        }
+      }
+      // Peluncuran dingin tidak pernah memicu AppState "change" — keadaannya sudah
+      // aktif sejak awal. Tanpa baris ini, membuka aplikasi setelah force-stop
+      // hanya menyalakan ulang penjadwalnya dan menunggu tiga jam lagi.
+      await catchUpPing();
+    })();
+    return () => {
+      batal = true;
+    };
+  }, [clockedIn, cookie]);
+
+  /**
+   * Kembali ke depan adalah satu-satunya pemulihan yang tersedia setelah
+   * force-stop: Android menaruh paket yang dihentikan paksa dalam keadaan
+   * *stopped* dan tidak mengirimkan broadcast apa pun ke sana — termasuk
+   * BOOT_COMPLETED — sampai penggunanya membuka aplikasinya sendiri.
+   */
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active" || !cookie) return;
+      // clock-out bisa terjadi di konsol web selagi telepon tidur
+      void qc.invalidateQueries({ queryKey: ["me"] });
+      void catchUpPing();
+    });
+    return () => sub.remove();
+  }, [cookie, qc]);
+
+  return null;
 }
