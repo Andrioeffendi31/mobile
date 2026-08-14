@@ -293,6 +293,9 @@ export type AttendanceDay = {
     note: string | null;
     /** kenapa titik ini patut dicurigai (mis. GPS palsu), atau null kalau bersih */
     suspect: string | null;
+    /** lubang pada jejak SESUDAH kejadian ini — `tertunda` berarti sebabnya sinyal,
+     *  bukan aplikasi yang berhenti berjalan */
+    jedaSesudah: { menit: number; tertunda: boolean } | null;
     photoKey: string | null;
     distanceM: number | null;
     /** null on rows written before coordinates were kept */

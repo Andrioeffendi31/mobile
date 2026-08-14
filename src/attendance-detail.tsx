@@ -4,7 +4,7 @@ import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { Image, Text, XStack, YStack } from "tamagui";
 import { API, type AttendanceDay, get, useSession } from "@/api";
-import { formatJarak, tanggalPanjang } from "@/format";
+import { durasiJam, formatJarak, tanggalPanjang } from "@/format";
 import { Peta, type Titik } from "@/peta";
 import { tint } from "@/theme";
 import { AttBadge, Mono, Note, Readout, SheetShell, Skeleton, useAndroidBack } from "@/ui";
@@ -281,6 +281,27 @@ function Day({ day }: { day: AttendanceDay }) {
                       <Text fontSize={12.5} color="$danger" fontWeight="500" lineHeight={18}>
                         {e.suspect}
                       </Text>
+                    ) : null}
+                    {/* Lubang pada jejak, dijelaskan kepada orangnya sendiri — ia yang
+                        paling tahu apakah ponselnya memang mati siang itu. */}
+                    {e.jedaSesudah ? (
+                      <YStack
+                        marginTop={4}
+                        backgroundColor="$warningSubtle"
+                        borderRadius={10}
+                        paddingHorizontal={11}
+                        paddingVertical={9}
+                        gap={2}
+                      >
+                        <Text fontSize={12.5} fontWeight="600" color="$warning">
+                          Tidak ada catatan selama {durasiJam(e.jedaSesudah.menit)}
+                        </Text>
+                        <Text fontSize={11.5} color="$fgMuted" lineHeight={17}>
+                          {e.jedaSesudah.tertunda
+                            ? "Ponsel tanpa jaringan — titik sesudahnya terkirim menyusul."
+                            : "Aplikasi kemungkinan ditutup, ponsel mati, atau dihentikan penghemat baterai."}
+                        </Text>
+                      </YStack>
                     ) : null}
                   </YStack>
                 </XStack>

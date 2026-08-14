@@ -15,7 +15,6 @@ import { TamaguiProvider, Theme, YStack } from "tamagui";
 // to happen during app init: the OS can launch this bundle headlessly to deliver
 // a background location, with no React tree mounted to do it later.
 import {
-  canPingInBackground,
   catchUpPing,
   clearQueue,
   startBackgroundPing,
@@ -280,12 +279,22 @@ function Trail({ cookie }: { cookie: string | null }) {
         if (!cookie) await clearQueue();
         return;
       }
-      if (!(await canPingInBackground())) {
-        const ok = await startBackgroundPing();
-        if (!ok && !batal) {
-          toast("Izin lokasi latar belakang ditolak · jejak lokasi tidak tercatat");
-          return;
-        }
+      /**
+       * Dipanggil tanpa syarat, bukan hanya ketika izinnya belum ada.
+       * `canPingInBackground()` hanya membaca IZIN, sedangkan yang perlu dipastikan
+       * adalah LAYANANNYA hidup — dan sesudah force-stop izinnya masih ada
+       * sementara layanannya sudah mati. Menjadikan izin sebagai penjaga berarti
+       * satu-satunya kasus yang paling perlu dipulihkan justru dilewati.
+       *
+       * Aman diulang: startBackgroundPing berhenti lebih awal kalau task-nya sudah
+       * jalan, dan yang tersisa hanya menyegarkan kalimat di notifikasi.
+       */
+      const ok = await startBackgroundPing(
+        me.data?.today.clockIn?.slice(0, 5) ?? "",
+      );
+      if (!ok && !batal) {
+        toast("Izin lokasi latar belakang ditolak · jejak lokasi tidak tercatat");
+        return;
       }
       // Peluncuran dingin tidak pernah memicu AppState "change" — keadaannya sudah
       // aktif sejak awal. Tanpa baris ini, membuka aplikasi setelah force-stop
@@ -295,7 +304,7 @@ function Trail({ cookie }: { cookie: string | null }) {
     return () => {
       batal = true;
     };
-  }, [clockedIn, cookie]);
+  }, [clockedIn, cookie, me.data?.today.clockIn]);
 
   /**
    * Kembali ke depan adalah satu-satunya pemulihan yang tersedia setelah

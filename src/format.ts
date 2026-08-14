@@ -39,14 +39,14 @@ export function bulanTerakhir(count = 12, from = new Date()): string[] {
 }
 
 /** Now in WIB, matching the server's clock rather than the phone's timezone. */
-export function jamWib(withSeconds = false) {
+export function jamWib(withSeconds = false, at: Date | number = new Date()) {
   return new Intl.DateTimeFormat("en-GB", {
     timeZone: "Asia/Jakarta",
     hour: "2-digit",
     minute: "2-digit",
     ...(withSeconds ? { second: "2-digit" as const } : {}),
     hour12: false,
-  }).format(new Date());
+  }).format(at);
 }
 
 /**
