@@ -1,7 +1,7 @@
 import { Image } from "react-native";
 import Constants from "expo-constants";
 import * as Updates from "expo-updates";
-import { useRouter } from "expo-router";
+import { useIsFocused, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { ScrollView, Text, YStack } from "tamagui";
 import { type Bootstrap, get } from "@/api";
@@ -18,7 +18,12 @@ import { Card, Group, Note, PageHeader, Row, Screen } from "@/ui";
  */
 export default function Tentang() {
   const router = useRouter();
-  const me = useQuery({ queryKey: ["me"], queryFn: () => get<Bootstrap>("/api/me") });
+  const isFocused = useIsFocused();
+  const me = useQuery({
+    queryKey: ["me"],
+    queryFn: ({ signal }) => get<Bootstrap>("/api/me", { signal }),
+    enabled: isFocused,
+  });
   const version = Constants.expoConfig?.version ?? "—";
   const build = Updates.isEmbeddedLaunch
     ? "bawaan build"

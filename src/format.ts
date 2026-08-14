@@ -133,6 +133,39 @@ export function menitAntara(startTime: string, endTime: string) {
   return diff >= 0 ? diff : diff + 24 * 60;
 }
 
+/**
+ * Menit kerja hari ini: dari absen masuk sampai absen keluar, atau sampai
+ * `sekarang` kalau harinya masih berjalan. Nol kalau belum absen masuk — bukan
+ * negatif dan bukan NaN, karena angka ini jadi pembilang cincin di Beranda.
+ *
+ * Pembungkusan tengah malam diserahkan ke `menitAntara` di atas: satpam yang
+ * masuk 22:00 dan keluar 06:00 bekerja delapan jam, bukan minus enam belas.
+ * Penyebutnya — panjang shift — juga `menitAntara(shift.start, shift.end)`,
+ * jadi tidak ada fungsi kedua yang menghitung hal yang sama.
+ */
+export function menitKerja(
+  clockIn: string | null,
+  clockOut: string | null,
+  sekarang: string = jamWib(),
+): number {
+  return clockIn ? menitAntara(clockIn, clockOut ?? sekarang) : 0;
+}
+
+if (__DEV__) {
+  const eq = (got: number, want: number, apa: string) => {
+    if (got !== want) throw new Error(`${apa}: ${got} ≠ ${want}`);
+  };
+  eq(menitKerja(null, null, "13:00"), 0, "belum absen");
+  eq(menitKerja("08:00", "17:00"), 540, "hari selesai");
+  eq(menitKerja("08:00", null, "11:30"), 210, "masih berjalan");
+  // absen keluar sesudah tengah malam: 22:00 → 06:00 itu delapan jam
+  eq(menitKerja("22:00:00", "06:00:00"), 480, "lintas tengah malam");
+  // kolom `time` Postgres membawa detik; keduanya harus mengabaikannya
+  eq(menitKerja("08:05:30", "08:35:00"), 30, "detik diabaikan");
+  eq(menitAntara("08:00", "17:00"), 540, "panjang shift siang");
+  eq(menitAntara("22:00", "06:00"), 480, "panjang shift malam");
+}
+
 /** "0858-8182-0410". Same grouping as the web's lib/hr.ts — duplicated rather
  *  than shared because mobile deliberately imports nothing from web/ (§10). */
 export function telepon(v: string | null | undefined) {

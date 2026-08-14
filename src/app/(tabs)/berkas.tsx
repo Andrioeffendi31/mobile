@@ -3,7 +3,7 @@ import { RefreshControl } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as Linking from "expo-linking";
-import { useRouter } from "expo-router";
+import { useIsFocused, useRouter } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ScrollView, Spinner, Text, YStack } from "tamagui";
 import { type Documents, get, postForm } from "@/api";
@@ -29,12 +29,25 @@ import {
  */
 export default function Berkas() {
   const router = useRouter();
+  const isFocused = useIsFocused();
   const qc = useQueryClient();
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const q = useQuery({
     queryKey: ["documents"],
-    queryFn: () => get<Documents>("/api/me/documents"),
+    queryFn: ({ signal }) => get<Documents>("/api/me/documents", { signal }),
+    enabled: isFocused,
   });
+
+  const refresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await q.refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   /**
    * The signed URL, then the system browser. The download itself cannot go
@@ -81,7 +94,9 @@ export default function Berkas() {
         onBack={() => (router.canGoBack() ? router.back() : router.replace("/pengaturan"))}
       />
       <ScrollView
-        refreshControl={<RefreshControl refreshing={q.isFetching} onRefresh={() => q.refetch()} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
+        }
         contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: 28, gap: 9 }}
       >
         <Note text="Berkas pribadi hanya dapat dilihat oleh Anda dan tim HR." />

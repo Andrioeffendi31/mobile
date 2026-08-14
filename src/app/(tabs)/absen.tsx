@@ -3,24 +3,23 @@ import { Feather } from "@expo/vector-icons";
 import type { ImageResult } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useIsFocused, useRouter } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { LinearGradient } from "@tamagui/linear-gradient";
 import { Image, ScrollView, Text, XStack, YStack } from "tamagui";
 import { type Bootstrap, type Office, get, postForm } from "@/api";
 import { stopBackgroundPing } from "@/background-ping";
-import { formatJarak, jamWib, tanggalPanjang, jarakMeter } from "@/format";
+import { formatJarak, tanggalPanjang, jarakMeter } from "@/format";
 import { canProcessImages, toWebp } from "@/image";
 import { Peta } from "@/peta";
-import { HEADER_GRADIENT, tint } from "@/theme";
+import { tint } from "@/theme";
 import { toast } from "@/toast";
 import {
   Btn,
   Card,
   ErrorNote,
   Group,
-  Mono,
+  Jam,
   Note,
   Row,
   Screen,
@@ -65,8 +64,13 @@ const SELFIE_WIDTH = 720;
 export default function Absen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const isFocused = useIsFocused();
   const qc = useQueryClient();
-  const me = useQuery({ queryKey: ["me"], queryFn: () => get<Bootstrap>("/api/me") });
+  const me = useQuery({
+    queryKey: ["me"],
+    queryFn: ({ signal }) => get<Bootstrap>("/api/me", { signal }),
+    enabled: isFocused,
+  });
 
   const [fix, setFix] = useState<Fix | null>(null);
   const [locError, setLocError] = useState<string | null>(null);
@@ -75,16 +79,10 @@ export default function Absen() {
   const [wfh, setWfh] = useState(false);
   const [officeId, setOfficeId] = useState<number | null>(null);
   const [picker, setPicker] = useState(false);
-  const [clock, setClock] = useState(jamWib(true));
 
   const data = me.data;
   const clockedIn = Boolean(data?.today.clockIn && !data.today.clockOut);
   const action = clockedIn ? "out" : "in";
-
-  useEffect(() => {
-    const t = setInterval(() => setClock(jamWib(true)), 1000);
-    return () => clearInterval(t);
-  }, []);
 
   /**
    * The GPS fix. Read once on arrival rather than on a timer — a fix costs
@@ -246,7 +244,11 @@ export default function Absen() {
       // Berhenti seketika, bukan menunggu ["me"] menyegarkan diri: persis pada detik
       // ini notifikasi "NanumHR mencatat lokasi" sedang dilihat orangnya.
       if (action === "out") await stopBackgroundPing();
-      await qc.invalidateQueries();
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["me"] }),
+        qc.invalidateQueries({ queryKey: ["attendance"], refetchType: "none" }),
+        qc.invalidateQueries({ queryKey: ["team"], refetchType: "none" }),
+      ]);
       toast(
         action === "in"
           ? `Absen masuk tercatat ${res.at} · ${res.location}`
@@ -324,15 +326,15 @@ export default function Absen() {
 
   return (
     <Screen>
-      {/* the same indigo the Beranda opens with, so arriving here reads as going
-          deeper into that card rather than landing somewhere else */}
-      <LinearGradient
-        colors={[...HEADER_GRADIENT]}
-        start={[0, 0]}
-        end={[0.6, 1]}
+      {/* Rata, bukan bergradien: Beranda dulu dibuka dengan indigo yang sama dan
+          layar ini sengaja mengulangnya agar terasa "masuk lebih dalam" dari kartu
+          itu. Beranda sekarang rata, jadi gradien di sini justru menjadi lompatan
+          ke bahasa visual yang sudah tidak dipakai di mana pun lagi. */}
+      <YStack
+        backgroundColor="$bg"
         paddingTop={insets.top + 9}
         paddingHorizontal={18}
-        paddingBottom={26}
+        paddingBottom={20}
       >
         <XStack alignItems="center" gap={10} marginBottom={16}>
           {/* bare chevron like every other back button — a translucent tile on a
@@ -349,22 +351,20 @@ export default function Absen() {
             accessibilityRole="button"
             aria-label="Kembali"
           >
-            <Feather name="chevron-left" size={25} color="#fff" />
+            <Feather name="chevron-left" size={25} color={tint("$fg")} />
           </XStack>
-          <Text fontSize={19} fontWeight="700" color="#fff">
+          <Text fontSize={19} fontWeight="700" color="$fg">
             {action === "in" ? "Absen Masuk" : "Absen Keluar"}
           </Text>
         </XStack>
 
         <YStack alignItems="center" gap={2}>
-          <Mono fontSize={44} fontWeight="700" color="#fff">
-            {clock}
-          </Mono>
-          <Text fontSize={12} color="#fff" opacity={0.85}>
+          <Jam active={isFocused} fontFamily="$mono" fontSize={44} fontWeight="700" color="$fg" />
+          <Text fontSize={12} color="$fgMuted">
             {tanggalPanjang(data.today.date)} · Shift {data.shift.start}–{data.shift.end}
           </Text>
         </YStack>
-      </LinearGradient>
+      </YStack>
 
       {/* the photo runs edge to edge, so the gutter belongs to the cards below it
           rather than to the scroll container */}
@@ -383,7 +383,7 @@ export default function Absen() {
 
         {/* the same verdict the card above states in words: the fence, and which
             side of it you are standing on */}
-        {fix ? (
+        {isFocused && fix ? (
           <Peta
             points={[
               { lat: fix.lat, lng: fix.lng, tone: "saya", label: "Posisi Anda" },

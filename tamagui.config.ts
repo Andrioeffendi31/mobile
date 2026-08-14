@@ -31,6 +31,8 @@ export const light = {
   placeholderColor: "#6b7280",
   accent: "#4f46e5",
   accentHover: "#4338ca",
+  accentFill: "#4f46e5",
+  accentFillHover: "#4338ca",
   accentFg: "#ffffff",
   accentSubtle: "#eef2ff",
   accentLine: "#c7d2fe",
@@ -55,34 +57,34 @@ export const light = {
 };
 
 /**
- * The mockup only ships a light palette. This is the same set with surfaces
- * inverted and status hues lifted for contrast, so `userInterfaceStyle` has
- * something to switch to (PRD-Mobile §6.7). Same keys on purpose: no screen
- * ever branches on the colour scheme.
+ * Dark mode memakai tangga tonal ala One UI: charcoal netral sebagai kanvas,
+ * lalu tiap tingkat surface naik sedikit terang. Pemisahan terutama datang dari
+ * tonal elevation, bukan garis biru yang kontras, sehingga kartu terasa menyatu.
  */
 export const dark: typeof light = {
-  bg: "#0f1115",
-  surface: "#171a21",
-  surface2: "#1c2029",
-  inset: "#22262f",
-  line: "#272c36",
-  lineStrong: "#343a46",
-  fg: "#f2f4f7",
-  fgMuted: "#a2abba",
-  fgSubtle: "#79828f",
-  // 4.7:1 on $surface, where the inherited default sat near 2:1
-  placeholderColor: "#7e8794",
-  accent: "#6366f1",
-  accentHover: "#818cf8",
+  bg: "#0d0e11",
+  surface: "#18191d",
+  surface2: "#202126",
+  inset: "#27282e",
+  line: "#2c2d33",
+  lineStrong: "#3b3d45",
+  fg: "#f5f5f7",
+  fgMuted: "#b4b5bd",
+  fgSubtle: "#858791",
+  placeholderColor: "#92949d",
+  accent: "#88a8f2",
+  accentHover: "#9ab6f5",
+  accentFill: "#5579d7",
+  accentFillHover: "#6788df",
   accentFg: "#ffffff",
-  accentSubtle: "#1e2140",
-  accentLine: "#3a3f7a",
-  success: "#34d399",
-  successSubtle: "#10281f",
-  warning: "#fbbf24",
-  warningSubtle: "#2a1f0d",
-  danger: "#f87171",
-  dangerSubtle: "#2b1414",
+  accentSubtle: "#20283a",
+  accentLine: "#34425f",
+  success: "#74c69d",
+  successSubtle: "#1c2b24",
+  warning: "#e8b86a",
+  warningSubtle: "#30281d",
+  danger: "#ed858b",
+  dangerSubtle: "#301f22",
   /**
    * The same red as the light theme, not this theme's lighter `danger`: #f87171
    * as a surface would take a white label down to 2.8:1. #c0392b is dark enough
@@ -90,8 +92,8 @@ export const dark: typeof light = {
    */
   dangerFill: "#c0392b",
   dangerFillFg: "#ffffff",
-  info: "#60a5fa",
-  infoSubtle: "#12213a",
+  info: "#7da6eb",
+  infoSubtle: "#202a3a",
 };
 
 export const tamaguiConfig = createTamagui({

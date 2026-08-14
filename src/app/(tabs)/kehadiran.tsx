@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { RefreshControl } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useIsFocused } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScrollView, Text, XStack, YStack } from "tamagui";
@@ -24,7 +24,9 @@ import {
 /** "Kehadiran Saya" (PRD-Mobile §6.2): own stats and daily log, per month. */
 export default function Kehadiran() {
   const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
   const [month, setMonth] = useState(todayWib().slice(0, 7));
+  const [refreshing, setRefreshing] = useState(false);
   /** the day whose detail sheet is open, by date — the sheet fetches its own */
   const [day, setDay] = useState<string | null>(null);
   const months = bulanTerakhir(12);
@@ -48,13 +50,27 @@ export default function Kehadiran() {
 
   const q = useQuery({
     queryKey: ["attendance", month],
-    queryFn: () => get<AttendanceMonth>(`/api/me/attendance?month=${month}`),
+    queryFn: ({ signal }) =>
+      get<AttendanceMonth>(`/api/me/attendance?month=${month}`, { signal }),
+    enabled: isFocused,
   });
+
+  const refresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await q.refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   return (
     <Screen paddingTop={insets.top}>
       <ScrollView
-        refreshControl={<RefreshControl refreshing={q.isFetching} onRefresh={() => q.refetch()} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
+        }
         contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: 28 }}
       >
         <Title>Kehadiran Saya</Title>

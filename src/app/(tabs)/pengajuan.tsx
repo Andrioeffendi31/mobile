@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { RefreshControl } from "react-native";
-import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useFocusEffect, useIsFocused, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Progress, ScrollView, Text, XStack, YStack } from "tamagui";
@@ -28,6 +28,7 @@ type Tab = "cuti" | "lembur";
 /** "Pengajuan Saya" (PRD-Mobile §6.3). */
 export default function Pengajuan() {
   const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
   const params = useLocalSearchParams<{ open?: string }>();
   const [tab, setTab] = useState<Tab>("cuti");
   const [sheet, setSheet] = useState<Tab | null>(null);
@@ -37,6 +38,7 @@ export default function Pengajuan() {
    * else to track.
    */
   const [viewing, setViewing] = useState<RequestItem | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   /**
    * The Beranda quick actions pick the segment, and stop there.
@@ -63,13 +65,29 @@ export default function Pengajuan() {
     ),
   );
 
-  const q = useQuery({ queryKey: ["requests"], queryFn: () => get<Requests>("/api/me/requests") });
+  const q = useQuery({
+    queryKey: ["requests"],
+    queryFn: ({ signal }) => get<Requests>("/api/me/requests", { signal }),
+    enabled: isFocused,
+  });
   const items = tab === "cuti" ? q.data?.cuti : q.data?.lembur;
+
+  const refresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await q.refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   return (
     <Screen paddingTop={insets.top}>
       <ScrollView
-        refreshControl={<RefreshControl refreshing={q.isFetching} onRefresh={() => q.refetch()} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
+        }
         contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: 28 }}
       >
         <Title>Pengajuan Saya</Title>

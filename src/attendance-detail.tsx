@@ -43,7 +43,7 @@ export function AttendanceDetailSheet({
 }) {
   const q = useQuery({
     queryKey: ["attendance-day", date],
-    queryFn: () => get<AttendanceDay>(`/api/me/attendance/${date}`),
+    queryFn: ({ signal }) => get<AttendanceDay>(`/api/me/attendance/${date}`, { signal }),
     enabled: open && date !== null,
   });
 

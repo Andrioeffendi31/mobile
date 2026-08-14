@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Animated, BackHandler, Keyboard, Platform } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { LinearGradient } from "@tamagui/linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Button as TButton,
@@ -27,6 +28,7 @@ import {
   useTheme,
 } from "tamagui";
 import { API, useSession } from "@/api";
+import { jamWib } from "@/format";
 import { att, avatarColor, req, tint } from "@/theme";
 
 /**
@@ -35,13 +37,23 @@ import { att, avatarColor, req, tint } from "@/theme";
  * with a single caller is harder to read than the markup it hides.
  */
 
-/** The mockup's default panel: white, 1px border, 13px radius. */
+/**
+ * The mockup's default panel: white, 1px border, rounded.
+ *
+ * Radius 16 dan bayangan lembut mengikuti rancangan baru. Garis 1px tetap ada
+ * karena di tema gelap bayangan tidak terlihat sama sekali — di sana garis itulah
+ * yang memisahkan kartu dari latarnya.
+ */
 export const Card = styled(TCard, {
   backgroundColor: "$surface",
   borderWidth: 1,
   borderColor: "$line",
-  borderRadius: 13,
+  borderRadius: 16,
   padding: 13,
+  shadowColor: "#14161b",
+  shadowOpacity: 0.05,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 2 },
 });
 
 export const Screen = styled(YStack, {
@@ -69,6 +81,19 @@ export const Mono = styled(Text, {
   fontVariant: ["tabular-nums"],
   color: "$fg",
 });
+
+/** Live clock shared by screens that only need to repaint this one text node. */
+export function Jam({ active = true, ...props }: ComponentProps<typeof Mono> & { active?: boolean }) {
+  const [value, setValue] = useState(() => jamWib(true));
+
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(() => setValue(jamWib(true)), 1_000);
+    return () => clearInterval(timer);
+  }, [active]);
+
+  return <Mono {...props}>{value}</Mono>;
+}
 
 export const Input = styled(TInput, {
   height: 42,
@@ -114,9 +139,9 @@ const BtnFrame = styled(TButton, {
   borderWidth: 0,
   fontSize: 14,
   fontWeight: "600",
-  backgroundColor: "$accent",
+  backgroundColor: "$accentFill",
   color: "$accentFg",
-  pressStyle: { backgroundColor: "$accentHover" },
+  pressStyle: { backgroundColor: "$accentFillHover" },
   disabledStyle: { backgroundColor: "$inset" },
 
   variants: {
@@ -161,8 +186,37 @@ const BtnFrame = styled(TButton, {
  * `color: fg-subtle`) is applied here instead. Last in prop order on purpose:
  * it has to win over whatever colour the `tone` variant set.
  */
-export function Btn({ disabled, ...rest }: ComponentProps<typeof BtnFrame>) {
-  return <BtnFrame {...rest} disabled={disabled} {...(disabled ? { color: "$fgSubtle" } : null)} />;
+export function Btn({
+  disabled,
+  grad,
+  children,
+  ...rest
+}: ComponentProps<typeof BtnFrame> & {
+  /** pasangan gradien dari theme.GRAD; menang atas `backgroundColor` */
+  grad?: readonly [string, string];
+}) {
+  return (
+    <BtnFrame
+      {...rest}
+      disabled={disabled}
+      {...(grad ? { backgroundColor: "transparent", overflow: "hidden" as const } : null)}
+      {...(disabled && !grad ? { color: "$fgSubtle" } : null)}
+    >
+      {/* lapisan pertama, di belakang label: latar tombol tidak bisa bergradien
+          sendiri, jadi gradiennya sebuah anak yang memenuhi bingkainya */}
+      {grad ? (
+        <LinearGradient
+          position="absolute"
+          width="100%"
+          height="100%"
+          colors={[...grad]}
+          start={[0, 0]}
+          end={[1, 1]}
+        />
+      ) : null}
+      {children}
+    </BtnFrame>
+  );
 }
 
 export function Badge({ label, fg, bg }: { label: string; fg: string; bg: string }) {
@@ -314,10 +368,10 @@ export function Chip({
       borderWidth={1}
       fontSize={12.5}
       fontWeight="400"
-      backgroundColor={on ? "$accent" : "$surface"}
+      backgroundColor={on ? "$accentFill" : "$surface"}
       // $lineStrong left an unselected pill at 1.43:1 against its surface; the
       // label carries the on/off state, but the pill still has to have an edge
-      borderColor={on ? "$accent" : "$fgSubtle"}
+      borderColor={on ? "$accentFill" : "$fgSubtle"}
       color={on ? "$accentFg" : "$fgMuted"}
       aria-selected={on}
       onPress={onPress}
@@ -419,7 +473,7 @@ export function Toggle({
       checked={checked}
       onCheckedChange={onChange}
       disabled={disabled}
-      backgroundColor={checked ? "$accent" : "$fgSubtle"}
+      backgroundColor={checked ? "$accentFill" : "$fgSubtle"}
       aria-label={label}
     >
       {/* transition, not `animation`: v5's config drives the thumb the same way
@@ -476,6 +530,297 @@ export function Group({
  * 54px minimum so every row clears the 48dp touch target, and the whole row is
  * the target rather than the control at its end.
  */
+/**
+ * Ubin ikon berwarna — kotak membulat berisi satu ikon Feather.
+ *
+ * Bentuk yang sama sudah ditulis inline di tiga tempat (baris pengaturan di
+ * bawah, aksi cepat di Beranda, gerbang izin) dan rancangan Beranda yang baru
+ * memakainya delapan kali dalam satu layar. Diangkat ke sini sebelum salinan
+ * kesembilan lahir.
+ *
+ * `fg` melewati `tint()` karena @expo/vector-icons menerima string warna, bukan
+ * token Tamagui — dan `tint()` sengaja selalu memakai palet terang supaya ikon di
+ * dalam ubin berwarna mempertahankan hue-nya di kedua skema.
+ */
+export function IconTile({
+  icon,
+  fg = "$fgMuted",
+  bg = "$inset",
+  grad,
+  size = 34,
+  radius,
+}: {
+  icon: ComponentProps<typeof Feather>["name"];
+  /** token warna ikon */
+  fg?: string;
+  /** token latar ubin; diabaikan kalau `grad` diisi */
+  bg?: string;
+  /** pasangan gradien dari theme.GRAD — dilukis expo-linear-gradient, yang sudah
+   *  ada di dalam APK, jadi ini tetap aman dikirim lewat OTA */
+  grad?: readonly [string, string];
+  size?: number;
+  radius?: number;
+}) {
+  const r = radius ?? Math.round(size * 0.3);
+  return (
+    <YStack
+      width={size}
+      height={size}
+      borderRadius={r}
+      backgroundColor={grad ? "transparent" : bg}
+      alignItems="center"
+      justifyContent="center"
+      flexShrink={0}
+      overflow="hidden"
+    >
+      {grad ? (
+        <LinearGradient
+          position="absolute"
+          width="100%"
+          height="100%"
+          borderRadius={r}
+          colors={[...grad]}
+          start={[0, 0]}
+          end={[1, 1]}
+        />
+      ) : null}
+      <Feather name={icon} size={Math.round(size * 0.5)} color={tint(fg)} />
+    </YStack>
+  );
+}
+
+/**
+ * Kartu statistik: ubin ikon, label, nilai, dan satu baris keterangan.
+ *
+ * Menggantikan dua salinan yang berbeda tipis — `HeaderStat` lokal di Beranda dan
+ * `Stat` lokal di Kehadiran — yang selama ini menua sendiri-sendiri.
+ */
+export function StatCard({
+  icon,
+  fg = "$accent",
+  bg = "$accentSubtle",
+  grad,
+  label,
+  value,
+  sub,
+  ...rest
+}: {
+  icon: ComponentProps<typeof Feather>["name"];
+  fg?: string;
+  bg?: string;
+  grad?: readonly [string, string];
+  label: string;
+  value: string;
+  sub?: string;
+} & ComponentProps<typeof Card>) {
+  return (
+    <Card flex={1} minHeight={80} padding={12} justifyContent="center" {...rest}>
+      <XStack alignItems="center" gap={8}>
+        <IconTile icon={icon} fg={fg} bg={bg} grad={grad} size={52} radius={16} />
+        <YStack flex={1} height={52} justifyContent="space-between">
+          <Text fontSize={11.5} lineHeight={14} color="$fgMuted" numberOfLines={1}>
+            {label}
+          </Text>
+          <Text
+            fontSize={value.length > 9 ? 14.5 : 18}
+            lineHeight={21}
+            fontWeight="700"
+            color="$fg"
+            numberOfLines={1}
+            letterSpacing={-0.45}
+          >
+            {value}
+          </Text>
+          {sub ? (
+            <Text fontSize={10.5} lineHeight={13} color="$fgSubtle" numberOfLines={1}>
+              {sub}
+            </Text>
+          ) : null}
+        </YStack>
+      </XStack>
+    </Card>
+  );
+}
+
+/**
+ * Cincin progres — digambar dari View biasa, tanpa satu paket pun.
+ *
+ * `react-native-svg` tidak terpasang di aplikasi ini, dan menambahkannya berarti
+ * kode native baru: pembaruan OTA yang memuatnya akan **crash** di APK yang sudah
+ * terpasang, bukan sekadar tampil salah. Jadi cincinnya memakai teknik dua
+ * setengah-lingkaran: tiap sisi menjepit satu lingkaran ber-border dengan
+ * `overflow:"hidden"`, lalu memutarnya sampai potongan yang terlihat persis
+ * sepanjang progresnya.
+ *
+ * Sudut diukur searah jarum jam dari pukul 12. Sisi kanan menampilkan 0°–180°,
+ * sisi kiri 180°–360°.
+ *
+ * ponytail: satu warna solid, bukan gradien. Gradien sejati pada busur menuntut
+ * masking yang tidak ada tanpa SVG; kalau nanti benar-benar perlu, jalannya lewat
+ * WebView seperti peta.tsx — bukan lewat paket baru.
+ */
+
+/**
+ * Rotasi tiap busur, dalam derajat.
+ *
+ * Sebuah lingkaran dengan dua border bersebelahan berwarna menampakkan busur 180°.
+ * Untuk sisi kanan busurnya membentang [-45°, 135°] sebelum diputar, jadi supaya
+ * UJUNG-nya mendarat tepat di sudut progres θ, ia diputar θ − 135; pangkalnya
+ * (θ − 180) otomatis jatuh di luar jepitan dan tidak terlihat. Sisi kiri sama
+ * persis, hanya busurnya berpusat di 225°, sehingga rotasinya θ − 315.
+ */
+export function busurDeg(progress: number) {
+  const theta = Math.max(0, Math.min(1, progress)) * 360;
+  return {
+    theta,
+    kanan: Math.min(theta, 180) - 135,
+    kiri: Math.max(theta, 180) - 315,
+  };
+}
+
+if (__DEV__) {
+  const eq = (got: number, want: number, apa: string) => {
+    if (Math.abs(got - want) > 0.001) throw new Error(`busurDeg ${apa}: ${got} ≠ ${want}`);
+  };
+  // progres nol: busur kanan diputar penuh keluar dari jepitannya
+  eq(busurDeg(0).kanan, -135, "kosong");
+  // seperempat: ujung busur mendarat di pukul 3
+  eq(busurDeg(0.25).kanan, -45, "seperempat");
+  // separuh: sisi kanan terisi penuh, sisi kiri belum mulai
+  eq(busurDeg(0.5).kanan, 45, "separuh kanan");
+  eq(busurDeg(0.5).kiri, -135, "separuh kiri");
+  // penuh: kedua sisi terisi
+  eq(busurDeg(1).kiri, 45, "penuh");
+  // lembur tidak boleh memutar cincin lebih dari sekali
+  eq(busurDeg(2.5).theta, 360, "dipatok di 100%");
+  eq(busurDeg(-1).theta, 0, "nilai negatif dipatok");
+}
+
+export function Ring({
+  progress,
+  size = 132,
+  thickness = 12,
+  colors,
+  track = "$inset",
+  hole = "$surface",
+  children,
+}: {
+  /** 0..1; nilai di luar rentang dipatok, jadi lembur tidak memutar cincin dua kali */
+  progress: number;
+  size?: number;
+  thickness?: number;
+  /** pasangan gradien dari theme.GRAD */
+  colors: readonly [string, string];
+  track?: string;
+  /**
+   * Warna lubang di tengah — HARUS sama dengan latar tempat cincin ini berdiri.
+   *
+   * ponytail: cincinnya dibuat dengan cara menutup tengah sebuah cakram, bukan
+   * dengan menggambar garis lengkung — garis lengkung tidak bisa bergradien.
+   * Konsekuensinya cincin ini hanya benar di atas bidang berwarna rata. Kalau
+   * suatu saat ia harus berdiri di atas gambar atau gradien, jalannya adalah
+   * SVG di dalam WebView, seperti peta.tsx.
+   */
+  hole?: string;
+  children?: ReactNode;
+}) {
+  const half = size / 2;
+  const { theta, kanan, kiri } = busurDeg(progress);
+
+  /**
+   * Satu juring: cakram bergradien yang separuhnya dijepit induknya, lalu diputar.
+   *
+   * `borderWidth = half` membuat "border" bertemu di titik pusat, sehingga
+   * bentuknya menjadi cakram utuh alih-alih cincin — dan cakram itulah yang bisa
+   * diisi gradien. Lubang di tengahnya ditutup belakangan.
+   */
+  const Juring = ({ deg, warna, sisi }: { deg: number; warna: string; sisi: "kiri" | "kanan" }) => (
+    <YStack
+      position="absolute"
+      width={half}
+      height={size}
+      left={sisi === "kanan" ? half : 0}
+      overflow="hidden"
+    >
+      <YStack
+        width={size}
+        height={size}
+        borderRadius={half}
+        borderWidth={half}
+        position="absolute"
+        left={sisi === "kanan" ? -half : 0}
+        borderTopColor={sisi === "kanan" ? warna : "transparent"}
+        borderRightColor={sisi === "kanan" ? warna : "transparent"}
+        borderBottomColor={sisi === "kiri" ? warna : "transparent"}
+        borderLeftColor={sisi === "kiri" ? warna : "transparent"}
+        transform={[{ rotate: `${deg}deg` }]}
+      />
+    </YStack>
+  );
+
+  return (
+    <YStack width={size} height={size} alignItems="center" justifyContent="center">
+      {/* jalur: cincin polos, digambar dengan border biasa karena ia satu warna */}
+      <YStack
+        position="absolute"
+        width={size}
+        height={size}
+        borderRadius={half}
+        borderWidth={thickness}
+        borderColor={track}
+      />
+      {/* dua juring, masing-masing satu ujung gradien — warna berpindah tepat di
+          pukul 6, tempat kedua sisi bertemu */}
+      {theta > 0 ? <Juring deg={kanan} warna={colors[0]} sisi="kanan" /> : null}
+      {theta > 180 ? <Juring deg={kiri} warna={colors[1]} sisi="kiri" /> : null}
+      {/* lubangnya: menutup pusat cakram dan menyisakan cincin */}
+      <YStack
+        position="absolute"
+        width={size - thickness * 2}
+        height={size - thickness * 2}
+        borderRadius={half}
+        backgroundColor={hole}
+      />
+      {children}
+    </YStack>
+  );
+}
+
+/** Judul kartu dengan aksi di kanan — "Rekan hadir hari ini · Lihat tim". */
+export function CardHead({
+  title,
+  action,
+  onAction,
+  right,
+}: {
+  title: string;
+  /** teks tautan di kanan; `right` menang kalau keduanya diisi */
+  action?: string;
+  onAction?: () => void;
+  right?: ReactNode;
+}) {
+  return (
+    <XStack alignItems="center" justifyContent="space-between" gap={10}>
+      <SectionLabel numberOfLines={1} flexShrink={1}>
+        {title}
+      </SectionLabel>
+      {right ??
+        (action ? (
+          <Text
+            fontSize={12.5}
+            fontWeight="600"
+            color="$accent"
+            onPress={onAction}
+            pressStyle={{ opacity: 0.6 }}
+            accessibilityRole="button"
+          >
+            {action}
+          </Text>
+        ) : null)}
+    </XStack>
+  );
+}
+
 export function Row({
   label,
   note,
@@ -522,19 +867,7 @@ export function Row({
       accessibilityState={{ disabled: disabled || loading, busy: loading }}
       aria-label={note ? `${label}. ${note}` : label}
     >
-      {icon ? (
-        <YStack
-          width={34}
-          height={34}
-          borderRadius={10}
-          backgroundColor={iconBg}
-          alignItems="center"
-          justifyContent="center"
-          flexShrink={0}
-        >
-          <Feather name={icon} size={17} color={tint(iconFg)} />
-        </YStack>
-      ) : null}
+      {icon ? <IconTile icon={icon} fg={iconFg} bg={iconBg} radius={10} /> : null}
 
       <YStack flex={1} gap={2}>
         <Text fontSize={13.5} fontWeight="500" color="$fg">
@@ -841,30 +1174,40 @@ export function Empty({ text }: { text: string }) {
   );
 }
 
-/**
- * The pulse every skeleton block shares. One loop per block rather than a
- * module-level Animated.Value: blocks mount in the same frame so they are in
- * phase anyway, and this way nothing is animating while nothing is loading.
- *
- * RN's Animated rather than Tamagui's driver — a repeating animation is the one
- * thing `transition` cannot express, and opacity on the native driver costs no
- * JS per frame.
- */
+/** One native animation drives every mounted skeleton block. The Home placeholder
+ * contains dozens of blocks; creating a native loop for each one caused a burst
+ * of bridge/animation allocations exactly while the initial query was pending. */
+const skeletonPulse = new Animated.Value(0.45);
+let pulseUsers = 0;
+let pulseLoop: ReturnType<typeof Animated.loop> | null = null;
+
 function usePulse() {
-  const value = useRef(new Animated.Value(0.45)).current;
-
   useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(value, { toValue: 1, duration: 620, useNativeDriver: true }),
-        Animated.timing(value, { toValue: 0.45, duration: 620, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [value]);
+    pulseUsers += 1;
+    if (pulseUsers === 1) {
+      pulseLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(skeletonPulse, { toValue: 1, duration: 620, useNativeDriver: true }),
+          Animated.timing(skeletonPulse, {
+            toValue: 0.45,
+            duration: 620,
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      pulseLoop.start();
+    }
+    return () => {
+      pulseUsers -= 1;
+      if (pulseUsers === 0) {
+        pulseLoop?.stop();
+        pulseLoop = null;
+        skeletonPulse.setValue(0.45);
+      }
+    };
+  }, []);
 
-  return value;
+  return skeletonPulse;
 }
 
 /**

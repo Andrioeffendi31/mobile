@@ -74,6 +74,15 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * A cold-start request must never be allowed to live forever. Besides leaving
+ * the Beranda on its skeleton, a hanging native fetch keeps its response and
+ * React Query observers alive while push/location startup work begins.
+ */
+const REQUEST_TIMEOUT_MS = 12_000;
+
+type RequestOptions = RequestInit & { timeoutMs?: number };
+
 /** Pull one cookie's `name=value` out of a Set-Cookie response header. Exported
  *  for the passkey flow, which finishes at the same NextAuth callback. */
 export function readCookie(header: string | null, name: string): string | null {
@@ -82,32 +91,55 @@ export function readCookie(header: string | null, name: string): string | null {
   return m ? `${name}=${m[1]}` : null;
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
   const { cookie } = useSession.getState();
-  const res = await fetch(`${API}${path}`, {
-    ...init,
-    headers: {
-      ...(cookie ? { cookie } : {}),
-      ...(init.headers ?? {}),
-    },
-  });
+  const controller = new AbortController();
+  const upstream = init.signal;
+  const abortFromCaller = () => controller.abort();
+  if (upstream?.aborted) controller.abort();
+  else upstream?.addEventListener("abort", abortFromCaller, { once: true });
+  const timeout = setTimeout(() => controller.abort(), init.timeoutMs ?? REQUEST_TIMEOUT_MS);
 
-  // an expired or revoked session must drop the app back to /login rather than
-  // showing every screen an error at once
-  if (res.status === 401) {
-    await useSession.getState().set(null);
-    throw new ApiError("Sesi berakhir, silakan masuk lagi", 401);
-  }
+  try {
+    const { timeoutMs: _timeoutMs, ...fetchInit } = init;
+    const res = await fetch(`${API}${path}`, {
+      ...fetchInit,
+      signal: controller.signal,
+      headers: {
+        ...(cookie ? { cookie } : {}),
+        ...(init.headers ?? {}),
+      },
+    });
 
-  const text = await res.text();
-  const data = text ? (JSON.parse(text) as T & { error?: string }) : ({} as T);
-  if (!res.ok) {
-    throw new ApiError((data as { error?: string }).error ?? "Gagal memuat data", res.status);
+    // an expired or revoked session must drop the app back to /login rather than
+    // showing every screen an error at once
+    if (res.status === 401) {
+      await useSession.getState().set(null);
+      throw new ApiError("Sesi berakhir, silakan masuk lagi", 401);
+    }
+
+    const text = await res.text();
+    const data = text ? (JSON.parse(text) as T & { error?: string }) : ({} as T);
+    if (!res.ok) {
+      throw new ApiError((data as { error?: string }).error ?? "Gagal memuat data", res.status);
+    }
+    return data as T;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    // Let TanStack Query recognise cancellation caused by an unmounted observer.
+    if (upstream?.aborted) throw error;
+    if (controller.signal.aborted) {
+      throw new ApiError("Server terlalu lama merespons. Coba lagi.", 408);
+    }
+    throw new ApiError("Tidak dapat terhubung ke server. Periksa koneksi.", 0);
+  } finally {
+    clearTimeout(timeout);
+    upstream?.removeEventListener("abort", abortFromCaller);
   }
-  return data as T;
 }
 
-export const get = <T>(path: string) => request<T>(path);
+export const get = <T>(path: string, options: Pick<RequestOptions, "signal" | "timeoutMs"> = {}) =>
+  request<T>(path, options);
 
 export const postJson = <T>(path: string, body: unknown, method = "POST") =>
   request<T>(path, {
@@ -138,6 +170,7 @@ export function postForm<T>(path: string, form: FormData, method = "POST"): Prom
   return new Promise<T>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open(method, `${API}${path}`);
+    xhr.timeout = 30_000;
     if (cookie) xhr.setRequestHeader("cookie", cookie);
     // no content-type header on purpose: XHR derives it from the FormData, and
     // setting it by hand loses the multipart boundary
@@ -264,7 +297,9 @@ export type Bootstrap = {
   team: {
     total: number;
     present: number;
-    avatars: { id: number; initials: string; photoKey: string | null }[];
+    /** `name` menyusul dari server; sampai itu terpasang, avatarnya tampil tanpa
+     *  nama alih-alih menampilkan tempat kosong */
+    avatars: { id: number; initials: string; photoKey: string | null; name?: string }[];
   };
 };
 

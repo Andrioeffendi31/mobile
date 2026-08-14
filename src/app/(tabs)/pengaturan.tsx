@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Linking from "expo-linking";
-import { useRouter } from "expo-router";
+import { useIsFocused, useRouter } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ScrollView, Text, YStack } from "tamagui";
 import { type Bootstrap, get, logout, postForm } from "@/api";
@@ -44,13 +44,27 @@ import {
  */
 export default function Pengaturan() {
   const router = useRouter();
+  const isFocused = useIsFocused();
   const avatar = useAvatarUpload();
   const qc = useQueryClient();
-  const me = useQuery({ queryKey: ["me"], queryFn: () => get<Bootstrap>("/api/me") });
+  const me = useQuery({
+    queryKey: ["me"],
+    queryFn: ({ signal }) => get<Bootstrap>("/api/me", { signal }),
+    enabled: isFocused,
+  });
 
   // the trail is started by the Beranda when the day starts; this reads the
   // permission back so "HR cannot see my location" has an answer in the app
-  const trail = useQuery({ queryKey: ["bg-location"], queryFn: canPingInBackground });
+  const trail = useQuery({
+    queryKey: ["bg-location"],
+    queryFn: canPingInBackground,
+    enabled: isFocused,
+  });
+  const passkeys = useQuery({
+    queryKey: ["passkeys"],
+    queryFn: ({ signal }) => get<{ ids: string[] }>("/api/me/passkeys", { signal }),
+    enabled: isFocused && passkeyAvailable(),
+  });
 
   const [confirmKeluar, setConfirmKeluar] = useState(false);
 
@@ -87,7 +101,7 @@ export default function Pengaturan() {
               <Avatar
                 seed={me.data.profile.id}
                 initials={me.data.profile.initials}
-                photoKey={me.data.profile.photoKey}
+                photoKey={isFocused ? me.data.profile.photoKey : null}
                 size={46}
                 borderRadius={13}
                 opacity={avatar.busy ? 0.5 : 1}
@@ -100,7 +114,7 @@ export default function Pengaturan() {
                 width={20}
                 height={20}
                 borderRadius={10}
-                backgroundColor="$accent"
+                backgroundColor="$accentFill"
                 borderWidth={2}
                 borderColor="$surface"
                 alignItems="center"
@@ -151,7 +165,7 @@ export default function Pengaturan() {
         <Group label="Keamanan & privasi">
           {/* gated by the caller, not by the row: a row that renders null inside
               a Group would leave its divider behind */}
-          {passkeyAvailable() ? <PasskeyRow ids={me.data?.passkeys ?? []} /> : null}
+          {passkeyAvailable() ? <PasskeyRow ids={passkeys.data?.ids ?? []} /> : null}
           <Row
             icon="lock"
             iconFg="$fgMuted"
@@ -422,8 +436,8 @@ function Notifikasi({ shift }: { shift?: Bootstrap["shift"] }) {
 
 /**
  * Enrol this device's biometric (PRD-Mobile §7). One-way on purpose: the app can
- * bind a passkey but has no endpoint to list or remove them, so this is a row
- * with an action rather than a switch that could not honour being turned off.
+ * bind and list passkeys but does not remove them, so this is a row with an
+ * action rather than a switch that could not honour being turned off.
  */
 function PasskeyRow({ ids }: { ids: string[] }) {
   const mine = usePrefs((s) => s.passkeyIds);
@@ -443,7 +457,7 @@ function PasskeyRow({ ids }: { ids: string[] }) {
   const daftar = useMutation({
     mutationFn: enrollPasskey,
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["me"] });
+      await qc.invalidateQueries({ queryKey: ["passkeys"] });
       toast("Passkey terdaftar · lain kali cukup biometrik");
     },
     onError: (e) => toast((e as Error).message),

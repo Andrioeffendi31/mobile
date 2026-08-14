@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useRouter } from "expo-router";
+import { useIsFocused, useRouter } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ScrollView, Text, XStack, YStack } from "tamagui";
 import { type Bootstrap, get, postJson } from "@/api";
@@ -35,10 +35,12 @@ import {
  */
 export default function Profil() {
   const router = useRouter();
+  const isFocused = useIsFocused();
   const qc = useQueryClient();
   const me = useQuery({
     queryKey: ["me"],
-    queryFn: () => get<Bootstrap>("/api/me"),
+    queryFn: ({ signal }) => get<Bootstrap>("/api/me", { signal }),
+    enabled: isFocused,
   });
   const [editing, setEditing] = useState(false);
 
@@ -71,7 +73,7 @@ export default function Profil() {
               <Avatar
                 seed={p.id}
                 initials={p.initials}
-                photoKey={p.photoKey}
+                photoKey={isFocused ? p.photoKey : null}
                 size={62}
               />
               <YStack alignItems="center" gap={3}>

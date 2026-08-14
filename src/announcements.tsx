@@ -1,12 +1,21 @@
 import { useState } from "react";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
-import { Paragraph, Text, XStack, YStack } from "tamagui";
-import { type Announcements, get } from "@/api";
-import { cat, tint } from "@/theme";
-import { Badge, Btn, Card, Note, SectionLabel, SheetShell, SkeletonRows } from "@/ui";
+import { Paragraph, Text, XStack, YStack, useTheme } from "tamagui";
+import { type Announcements, type Bootstrap, get } from "@/api";
+import { cat, GRAD, tint } from "@/theme";
+import {
+  Badge,
+  Btn,
+  Card,
+  IconTile,
+  Note,
+  SheetShell,
+  SkeletonRows,
+} from "@/ui";
 
 type Item = Announcements["items"][number];
+type Preview = Bootstrap["announcements"][number];
 
 /**
  * The announcement feed at the foot of the Beranda (moved here from the old Info
@@ -17,23 +26,78 @@ type Item = Announcements["items"][number];
  * bottom of the home screen into a wall of text nobody scrolled past; it now
  * lives in a sheet, one tap away.
  */
-export function Pengumuman() {
+export function Pengumuman({ preview }: { preview: Preview[] }) {
+  const theme = useTheme();
   // two pieces of state, not one nullable item: the sheet animates out, and
   // dropping the item on close would empty the frame while it is still sliding
   const [detail, setDetail] = useState<Item | null>(null);
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const q = useQuery({
     queryKey: ["announcements"],
-    queryFn: () => get<Announcements>("/api/me/announcements"),
+    queryFn: ({ signal }) => get<Announcements>("/api/me/announcements", { signal }),
+    // /api/me already carries the two rows needed by the Home preview. Fetch the
+    // 50-row body feed only when somebody asks to read or expand it.
+    enabled: false,
   });
 
-  return (
-    <YStack gap={9}>
-      <SectionLabel>Pengumuman</SectionLabel>
+  const items: (Item | Preview)[] = q.data?.items ?? preview;
 
-      {q.isPending ? (
+  const loadAll = async () => {
+    if (q.data) return q.data.items;
+    const result = await q.refetch();
+    return result.data?.items ?? [];
+  };
+
+  const openDetail = async (id: number) => {
+    const full = (await loadAll()).find((item) => item.id === id);
+    if (!full) return;
+    setDetail(full);
+    setOpen(true);
+  };
+
+  return (
+    // Satu kartu yang memuat judul dan preview pertama, seperti rancangan Home.
+    // "Lihat semua" membuka sisanya inline karena belum ada layar daftar khusus.
+    <Card padding={18} gap={14} borderRadius={28}>
+      <XStack alignItems="center" justifyContent="space-between" gap={10}>
+        <Text fontSize={16.5} fontWeight="700" color="$fg">
+          Pengumuman
+        </Text>
+        <XStack
+          alignItems="center"
+          gap={4}
+          backgroundColor="$accentSubtle"
+          borderRadius={16}
+          paddingHorizontal={11}
+          paddingVertical={7}
+          onPress={() => {
+            if (expanded) {
+              setExpanded(false);
+              return;
+            }
+            void loadAll().then((loaded) => {
+              if (loaded.length) setExpanded(true);
+            });
+          }}
+          pressStyle={{ opacity: 0.7, scale: 0.98 }}
+          accessibilityRole="button"
+          aria-label={expanded ? "Ringkas pengumuman" : "Lihat semua pengumuman"}
+        >
+          <Text fontSize={11.5} fontWeight="600" color="$accent">
+            {expanded ? "Ringkas" : "Lihat semua"}
+          </Text>
+          <Feather
+            name={expanded ? "chevron-up" : "chevron-right"}
+            size={14}
+            color={theme.accent?.val}
+          />
+        </XStack>
+      </XStack>
+
+      {q.isFetching && items.length === 0 ? (
         <SkeletonRows count={3} lead={32} trail={false} />
-      ) : q.isError ? (
+      ) : q.isError && items.length === 0 ? (
         // the Beranda already reports a failed bootstrap loudly; a second red
         // panel for the feed would bury the rest of the screen
         <Note
@@ -41,56 +105,72 @@ export function Pengumuman() {
           fg="$warning"
           bg="$warningSubtle"
         />
-      ) : q.data.items.length === 0 ? (
-        <Note text="Belum ada pengumuman." fg="$fgMuted" bg="$inset" />
+      ) : items.length === 0 ? (
+        <XStack
+          alignItems="center"
+          gap={12}
+          padding={14}
+          borderRadius={22}
+          backgroundColor="$surface2"
+        >
+          <IconTile icon="bell" fg="#fff" grad={GRAD.ungu} size={50} radius={17} />
+          <YStack flex={1} gap={3}>
+            <Text fontSize={13.5} fontWeight="600" color="$fg">
+              Belum ada pengumuman
+            </Text>
+            <Text fontSize={11.5} lineHeight={16} color="$fgSubtle">
+              Pengumuman akan muncul di sini.
+            </Text>
+          </YStack>
+        </XStack>
       ) : (
-        q.data.items.map((a) => {
+        (expanded ? items : items.slice(0, 1)).map((a) => {
           const tone = cat(a.category);
           return (
-            <Card
+            <XStack
               key={a.id}
-              flexDirection="row"
               alignItems="center"
-              gap={11}
-              paddingHorizontal={14}
-              paddingVertical={12}
-              borderColor={a.pinned ? "$accentLine" : "$line"}
-              pressStyle={{ backgroundColor: "$surface2" }}
-              onPress={() => {
-                setDetail(a);
-                setOpen(true);
-              }}
+              gap={12}
+              padding={14}
+              borderRadius={20}
+              backgroundColor="$surface2"
+              borderWidth={1}
+              borderColor={"pinned" in a && a.pinned ? "$accentLine" : "transparent"}
+              pressStyle={{ backgroundColor: "$inset" }}
+              onPress={() => void openDetail(a.id)}
               accessibilityRole="button"
               aria-label={`${a.title}. ${a.date}. ${a.category}. Buka detail`}
             >
               <YStack
-                width={32}
-                height={32}
-                borderRadius={10}
+                width={44}
+                height={44}
+                borderRadius={15}
                 backgroundColor={tone.bg}
                 alignItems="center"
                 justifyContent="center"
                 flexShrink={0}
               >
-                <Feather name="volume-2" size={15} color={tint(tone.fg)} />
+                <Feather name="volume-2" size={19} color={tint(tone.fg)} />
               </YStack>
-              <YStack flex={1} gap={2}>
-                <Text fontSize={13.5} fontWeight="600" color="$fg" numberOfLines={1}>
+              <YStack flex={1} gap={3}>
+                <Text fontSize={13.5} fontWeight="600" color="$fg">
                   {a.title}
                 </Text>
-                <Text fontSize={11.5} color="$fgSubtle" numberOfLines={1}>
+                <Text fontSize={11.5} lineHeight={16} color="$fgSubtle">
                   {a.date} · {a.category}
                 </Text>
               </YStack>
-              {a.pinned ? <Badge label="Penting" fg="$warning" bg="$warningSubtle" /> : null}
-              <Feather name="chevron-right" size={15} color={tint("$fgSubtle")} />
-            </Card>
+              {"pinned" in a && a.pinned ? (
+                <Badge label="Penting" fg="$warning" bg="$warningSubtle" />
+              ) : null}
+              <Feather name="chevron-right" size={15} color={theme.fgSubtle?.val} />
+            </XStack>
           );
         })
       )}
 
       <Detail item={detail} open={open} onClose={() => setOpen(false)} />
-    </YStack>
+    </Card>
   );
 }
 

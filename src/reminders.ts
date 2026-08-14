@@ -25,6 +25,11 @@ const idFor = (kind: (typeof KINDS)[number], weekday: number) =>
 
 const ALL_IDS = WEEKDAYS.flatMap((d) => KINDS.map((k) => idFor(k, d)));
 
+/** Last schedule applied in this JS process. Bootstrap invalidations often
+ * return a fresh object with identical reminder inputs; native work is only
+ * needed when one of those inputs really changed. */
+let lastSignature: string | null = null;
+
 const CHANNEL = "absen";
 
 /**
@@ -107,11 +112,41 @@ async function ensureChannel() {
  * is fine — expo-notifications re-registers on boot.
  */
 export async function syncReminders(me: Bootstrap | undefined) {
-  await Promise.all(
-    ALL_IDS.map((id) => Notifications.cancelScheduledNotificationAsync(id).catch(() => {})),
-  );
+  // The tab layout renders once before bootstrap exists. Previously that empty
+  // render still fired ten native cancellation calls during the busiest part of
+  // cold start, then repeated all ten when /api/me completed.
+  if (!me) return;
 
-  if (!usePrefs.getState().reminder || !me) return;
+  const enabled = usePrefs.getState().reminder;
+  const signature = enabled
+    ? [
+        "on",
+        me.today.date,
+        me.today.clockIn ?? "",
+        me.today.clockOut ?? "",
+        me.shift.start,
+        me.shift.end,
+      ].join("|")
+    : "off";
+  if (signature === lastSignature) return;
+
+  // Off is the persisted default. On a fresh process there is nothing new to
+  // apply; reminders were already cancelled when the switch changed to off.
+  if (!enabled && lastSignature === null) {
+    lastSignature = signature;
+    return;
+  }
+
+  // Keep bridge pressure predictable on lower-end Android devices. Reminder
+  // maintenance is background work; completing a few ms later is harmless.
+  for (const id of ALL_IDS) {
+    await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
+  }
+
+  if (!enabled) {
+    lastSignature = signature;
+    return;
+  }
 
   // never prompt from here: the switch is off by default, so reaching this line
   // means somebody asked for it, and if they refuse the OS dialog the switch stays
@@ -156,4 +191,5 @@ export async function syncReminders(me: Bootstrap | undefined) {
       });
     }
   }
+  lastSignature = signature;
 }

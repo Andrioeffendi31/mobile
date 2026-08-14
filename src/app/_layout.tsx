@@ -25,7 +25,7 @@ import {
 // React treats as a render error and Android reports as a force close — see the
 // Beranda header gradient.
 import "@tamagui/native/setup-expo-linear-gradient";
-import { type Bootstrap, get, useSession } from "@/api";
+import { ApiError, type Bootstrap, get, useSession } from "@/api";
 import { IzinLokasi, useIzinLokasi } from "@/izin-lokasi";
 import { IzinNotifikasi } from "@/izin-notifikasi";
 import { usePrefs } from "@/prefs";
@@ -34,11 +34,17 @@ import { dark, light, tamaguiConfig } from "../../tamagui.config";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // a phone loses signal in lifts and basements; one silent retry beats an
-      // error card the user has to tap through
-      retry: 1,
-      staleTime: 30_000,
-      refetchOnMount: "always",
+      // Retry a transient server failure once, but never repeat a request that
+      // already spent 12 seconds timing out or has no network route.
+      retry: (failureCount, error) =>
+        failureCount < 1 && error instanceof ApiError && error.status >= 500,
+      retryDelay: 750,
+      staleTime: 2 * 60_000,
+      gcTime: 2 * 60_000,
+      // Several mounted guards consume the same bootstrap. Refetching it for
+      // every observer made one cold start issue back-to-back /api/me requests.
+      refetchOnMount: true,
+      refetchOnWindowFocus: false,
     },
     // a 401 clears the session and bounces to /login, so a retried mutation
     // would only replay a request that can no longer succeed
@@ -202,6 +208,8 @@ function Gate({
         <Stack.Screen name="login" />
         <Stack.Screen name="ganti-sandi" />
         <Stack.Screen name="(tabs)" />
+        {/* pintu masuk App Links; ia hanya memetakan lalu me-redirect */}
+        <Stack.Screen name="buka/[tujuan]" />
       </Stack>
     </>
   );
@@ -247,7 +255,7 @@ function SandiGate({
 }) {
   const me = useQuery({
     queryKey: ["me"],
-    queryFn: () => get<Bootstrap>("/api/me"),
+    queryFn: ({ signal }) => get<Bootstrap>("/api/me", { signal }),
     enabled: Boolean(cookie),
   });
 
@@ -274,7 +282,7 @@ function Trail({ cookie }: { cookie: string | null }) {
   const qc = useQueryClient();
   const me = useQuery({
     queryKey: ["me"],
-    queryFn: () => get<Bootstrap>("/api/me"),
+    queryFn: ({ signal }) => get<Bootstrap>("/api/me", { signal }),
     enabled: Boolean(cookie),
   });
   const clockedIn = Boolean(
@@ -293,6 +301,10 @@ function Trail({ cookie }: { cookie: string | null }) {
    * akan menyalakan apa pun sampai aplikasinya ditutup dan dibuka lagi.
    */
   const rukun = useCallback(async () => {
+    // `clockedIn` is false while the bootstrap is pending. Treating that as real
+    // attendance state stopped an existing Android service, then started it again
+    // a moment later and immediately requested GPS — expensive churn at launch.
+    if (cookie && !me.data) return;
     if (!clockedIn) {
       await stopBackgroundPing();
       if (!cookie) await clearQueue();
@@ -321,8 +333,23 @@ function Trail({ cookie }: { cookie: string | null }) {
   }, [clockedIn, cookie, me.data?.today.clockIn, bolehLokasi]);
 
   useEffect(() => {
-    void rukun();
-  }, [rukun]);
+    // Logout must stop tracking immediately. Signed-in reconciliation is not
+    // needed for first paint, so leave the JS/native bridge quiet until Beranda
+    // has settled.
+    if (!cookie) {
+      void rukun().catch((error) =>
+        console.warn("[ping] gagal menghentikan pelacakan", (error as Error).message),
+      );
+      return;
+    }
+    if (!me.data) return;
+    const timer = setTimeout(() => {
+      void rukun().catch((error) =>
+        console.warn("[ping] gagal menyelaraskan pelacakan", (error as Error).message),
+      );
+    }, 1_200);
+    return () => clearTimeout(timer);
+  }, [cookie, me.data, rukun]);
 
   /**
    * Kembali ke depan adalah satu-satunya pemulihan yang tersedia setelah
@@ -335,13 +362,12 @@ function Trail({ cookie }: { cookie: string | null }) {
       if (state !== "active" || !cookie) return;
       // clock-out bisa terjadi di konsol web selagi telepon tidur
       void qc.invalidateQueries({ queryKey: ["me"] });
-      // rukun(), bukan catchUpPing() saja: kembali dari Pengaturan sistem dengan
-      // izin yang baru diberikan harus menyalakan layanannya, bukan cuma mengirim
-      // satu fix susulan yang tidak akan pernah punya penerus.
-      void rukun();
+      // The fresh query drives the reconciliation effect. Calling `rukun` here
+      // too used stale attendance state and duplicated location work whenever a
+      // camera/settings activity returned to the app.
     });
     return () => sub.remove();
-  }, [cookie, qc, rukun]);
+  }, [cookie, qc]);
 
   return null;
 }

@@ -86,7 +86,10 @@ export function LeaveSheet({
     mutationFn: () =>
       postJson("/api/me/requests", { kind: "cuti", id: request?.id }, "PATCH"),
     onSuccess: async () => {
-      await qc.invalidateQueries();
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["requests"] }),
+        qc.invalidateQueries({ queryKey: ["me"], refetchType: "none" }),
+      ]);
       onClose();
       toast("Pengajuan dibatalkan");
     },
@@ -123,7 +126,10 @@ export function LeaveSheet({
       return postForm<{ days: number }>("/api/me/requests", form, "PUT");
     },
     onSuccess: async (res) => {
-      await qc.invalidateQueries();
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["requests"] }),
+        qc.invalidateQueries({ queryKey: ["me"], refetchType: "none" }),
+      ]);
       onClose();
       toast(
         edit
@@ -361,7 +367,10 @@ export function OvertimeSheet({
     mutationFn: () =>
       postJson("/api/me/requests", { kind: "lembur", id: request?.id }, "PATCH"),
     onSuccess: async () => {
-      await qc.invalidateQueries();
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["requests"] }),
+        qc.invalidateQueries({ queryKey: ["me"], refetchType: "none" }),
+      ]);
       onClose();
       toast("Pengajuan dibatalkan");
     },
@@ -389,7 +398,10 @@ export function OvertimeSheet({
         reason: reason.trim(),
       }),
     onSuccess: async () => {
-      await qc.invalidateQueries();
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["requests"] }),
+        qc.invalidateQueries({ queryKey: ["me"], refetchType: "none" }),
+      ]);
       onClose();
       toast("Pengajuan lembur terkirim");
     },

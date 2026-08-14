@@ -1,42 +1,78 @@
 import { useEffect, useState } from "react";
 import { RefreshControl } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useIsFocused, useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { LinearGradient } from "@tamagui/linear-gradient";
-import { ScrollView, Text, XStack, YStack } from "tamagui";
-import { type Bootstrap, get } from "@/api";
+import { ScrollView, Text, XStack, YStack, useTheme } from "tamagui";
+import { type Bootstrap, type Team, get } from "@/api";
 import { Pengumuman } from "@/announcements";
-import { durasiJam, jamWib, sapaan, tanggalPanjang } from "@/format";
-import { HEADER_GRADIENT, tint } from "@/theme";
+import {
+  durasiJam,
+  jamWib,
+  menitAntara,
+  menitKerja,
+  sapaan,
+  tanggalPanjang,
+} from "@/format";
+import { GRAD } from "@/theme";
 import {
   Avatar,
   Btn,
   Card,
   ErrorNote,
+  IconTile,
   Mono,
+  Ring,
   Screen,
-  SectionLabel,
   Skeleton,
   SkeletonRows,
+  StatCard,
 } from "@/ui";
 
 export default function Beranda() {
   const insets = useSafeAreaInsets();
+  const theme = useTheme();
   const router = useRouter();
   const qc = useQueryClient();
+  const isFocused = useIsFocused();
   const [clock, setClock] = useState(jamWib(true));
+  const [refreshing, setRefreshing] = useState(false);
+  const [secondaryReady, setSecondaryReady] = useState(false);
 
-  const me = useQuery({ queryKey: ["me"], queryFn: () => get<Bootstrap>("/api/me") });
+  const me = useQuery({
+    queryKey: ["me"],
+    queryFn: ({ signal }) => get<Bootstrap>("/api/me", { signal }),
+    enabled: isFocused,
+  });
+  const data = me.data;
+
+  // Team/photos are below the first viewport and have a dedicated endpoint.
+  // Starting them after Home commits keeps the critical bootstrap small.
+  useEffect(() => {
+    if (!isFocused || !data) {
+      setSecondaryReady(false);
+      return;
+    }
+    const timer = setTimeout(() => setSecondaryReady(true), 650);
+    return () => clearTimeout(timer);
+  }, [data, isFocused]);
+
+  const teamQuery = useQuery({
+    queryKey: ["team"],
+    queryFn: ({ signal }) => get<Team>("/api/me/team", { signal }),
+    enabled: isFocused && secondaryReady,
+  });
 
   // the mockup's live clock; one interval, cleaned up with the screen
   useEffect(() => {
+    // Do not repaint the entire skeleton once per second while the network is
+    // still pending. The live value only becomes visible after bootstrap exists.
+    if (!data || !isFocused) return;
     const t = setInterval(() => setClock(jamWib(true)), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [data, isFocused]);
 
-  const data = me.data;
   const clockedIn = Boolean(data?.today.clockIn && !data.today.clockOut);
 
   if (me.isPending) return <BerandaSkeleton />;
@@ -55,192 +91,512 @@ export default function Beranda() {
   // higher role grants nothing extra here, it just works.
 
   const quick = [
-    { label: "Ajukan cuti", icon: "calendar", tint: "$accent", bg: "$accentSubtle", to: "/pengajuan?open=cuti" },
-    { label: "Ajukan lembur", icon: "clock", tint: "$warning", bg: "$warningSubtle", to: "/pengajuan?open=lembur" },
-    { label: "Riwayat absen", icon: "check-circle", tint: "$success", bg: "$successSubtle", to: "/kehadiran" },
-    { label: "Berkas saya", icon: "folder", tint: "$info", bg: "$infoSubtle", to: "/berkas" },
+    { label: "Cuti", icon: "calendar", grad: GRAD.ungu, to: "/pengajuan?open=cuti" },
+    { label: "Lembur", icon: "clock", grad: GRAD.jingga, to: "/pengajuan?open=lembur" },
+    { label: "Absen", icon: "check-circle", grad: GRAD.hijau, to: "/kehadiran" },
+    { label: "Berkas", icon: "folder", grad: GRAD.biru, to: "/berkas" },
   ] as const;
+
+  const kerja = menitKerja(data.today.clockIn, data.today.clockOut, clock.slice(0, 5));
+  const target = menitAntara(data.shift.start, data.shift.end);
+  const hadir = teamQuery.data?.members.filter((member) =>
+    ["hadir", "wfh", "telat"].includes(member.status),
+  );
+  const team = {
+    total: teamQuery.data?.members.length ?? 0,
+    present: hadir?.length ?? 0,
+    avatars: (hadir ?? []).slice(0, 5),
+  };
+  // sisa avatar yang tidak muat di baris — gelembung "+22" di ujungnya
+  const sisaRekan = team.present - team.avatars.length;
+
+  const refresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        me.refetch(),
+        secondaryReady ? teamQuery.refetch() : Promise.resolve(),
+      ]);
+      void qc.invalidateQueries({ queryKey: ["announcements"], refetchType: "none" });
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   return (
     <Screen>
       <ScrollView
         refreshControl={
           <RefreshControl
-            refreshing={me.isFetching}
-            // the feed at the foot of this screen owns its own query, so one pull
-            // has to reach both
-            onRefresh={() => {
-              void me.refetch();
-              void qc.invalidateQueries({ queryKey: ["announcements"] });
-            }}
+            refreshing={refreshing}
+            onRefresh={() => void refresh()}
           />
         }
         contentContainerStyle={{ paddingBottom: 28 }}
       >
-        {/* tamagui's wrapper around expo-linear-gradient, so it takes the same
-            style props as everything else on this screen */}
-        <LinearGradient
-          colors={[...HEADER_GRADIENT]}
-          start={[0, 0]}
-          end={[0.6, 1]}
-          paddingTop={insets.top + 10}
-          paddingHorizontal={22}
-          paddingBottom={58}
-        >
-          <XStack alignItems="center" justifyContent="space-between" paddingBottom={18}>
-            <YStack flex={1}>
-              <Text fontSize={13} color="#fff" opacity={0.85}>
-                {sapaan()},
-              </Text>
-              <Text fontSize={20} fontWeight="700" color="#fff" numberOfLines={1}>
-                {data.profile.name}
-              </Text>
-              <Mono fontSize={11.5} color="#fff" opacity={0.8}>
-                {data.profile.nik} · {data.profile.division}
-              </Mono>
-            </YStack>
-            {/* the mockup's shortcut into Pengaturan — the avatar is where a
-                phone user reaches for their own account */}
-            <Avatar
-              seed={data.profile.id}
-              initials={data.profile.initials}
-              photoKey={data.profile.photoKey}
-              size={44}
-              borderWidth={2}
-              borderColor="rgba(255,255,255,.3)"
-              onPress={() => router.push("/pengaturan")}
-              pressStyle={{ opacity: 0.8 }}
-              accessibilityRole="button"
-              aria-label="Buka pengaturan"
+        <YStack paddingHorizontal={18} paddingTop={insets.top + 10} gap={14}>
+          <Card padding={18} borderRadius={28} overflow="hidden">
+            <YStack
+              position="absolute"
+              width={116}
+              height={116}
+              borderRadius={58}
+              backgroundColor="$accentSubtle"
+              right={-24}
+              top={-38}
+              opacity={0.72}
+              pointerEvents="none"
             />
-          </XStack>
+            <YStack
+              position="absolute"
+              width={42}
+              height={42}
+              borderRadius={21}
+              backgroundColor="$infoSubtle"
+              right={84}
+              bottom={-19}
+              opacity={0.58}
+              pointerEvents="none"
+            />
 
-          <XStack gap={9}>
-            <HeaderStat
+            <XStack alignItems="center" justifyContent="space-between" gap={14}>
+              <YStack flex={1} gap={8}>
+                <Text fontSize={13.5} fontWeight="500" color="$fgMuted">
+                  {sapaan()},
+                </Text>
+                <Text
+                  fontSize={24}
+                  lineHeight={29}
+                  fontWeight="700"
+                  color="$fg"
+                  letterSpacing={-0.55}
+                >
+                  {data.profile.name}
+                </Text>
+
+                <XStack alignItems="center" flexWrap="wrap" gap={7}>
+                  <XStack
+                    alignItems="center"
+                    gap={5}
+                    backgroundColor="$accentSubtle"
+                    borderRadius={14}
+                    paddingHorizontal={9}
+                    paddingVertical={6}
+                  >
+                    <Feather name="hash" size={12} color={theme.accent?.val} />
+                    <Mono fontSize={11} fontWeight="600" color="$accent">
+                      {data.profile.nik}
+                    </Mono>
+                  </XStack>
+                  <XStack
+                    maxWidth="100%"
+                    alignItems="center"
+                    gap={6}
+                    backgroundColor="$inset"
+                    borderRadius={14}
+                    paddingHorizontal={9}
+                    paddingVertical={6}
+                  >
+                    <Feather name="briefcase" size={12} color={theme.fgMuted?.val} />
+                    <Text flexShrink={1} fontSize={11} fontWeight="500" color="$fgMuted">
+                      {data.profile.division?.trim() || "Tanpa divisi"}
+                    </Text>
+                  </XStack>
+                </XStack>
+              </YStack>
+
+              <YStack>
+                <Avatar
+                  seed={data.profile.id}
+                  initials={data.profile.initials}
+                  photoKey={isFocused ? data.profile.photoKey : null}
+                  size={64}
+                  borderWidth={3}
+                  borderColor="$accent"
+                  onPress={() => router.push("/pengaturan")}
+                  pressStyle={{ opacity: 0.82, scale: 0.97 }}
+                  accessibilityRole="button"
+                  aria-label="Buka pengaturan"
+                />
+                <YStack
+                  position="absolute"
+                  right={-2}
+                  bottom={-2}
+                  width={22}
+                  height={22}
+                  borderRadius={11}
+                  backgroundColor="$accentFill"
+                  borderWidth={2}
+                  borderColor="$surface"
+                  alignItems="center"
+                  justifyContent="center"
+                  pointerEvents="none"
+                >
+                  <Feather name="chevron-right" size={12} color="#fff" />
+                </YStack>
+              </YStack>
+            </XStack>
+          </Card>
+
+          <XStack gap={10}>
+            <StatCard
+              icon="check"
+              fg="#fff"
+              grad={GRAD.ungu}
               label="Status"
-              value={clockedIn ? "Sudah absen" : data.today.clockOut ? "Selesai" : "Belum absen"}
+              value={clockedIn ? "Bekerja" : data.today.clockOut ? "Selesai" : "Belum absen"}
+              sub="Hari ini"
             />
-            <HeaderStat label="Sisa cuti" value={`${data.leave.remaining} hari`} numeric />
-            <HeaderStat label="Lembur" value={durasiJam(data.overtime.minutes)} numeric />
+            <StatCard
+              icon="calendar"
+              fg="#fff"
+              grad={GRAD.biru}
+              label="Sisa cuti"
+              value={`${data.leave.remaining} hari`}
+              sub="Tahun ini"
+            />
           </XStack>
-        </LinearGradient>
 
-        <YStack paddingHorizontal={18} marginTop={-40} gap={16}>
-          <Card padding={19} alignItems="center" elevation={8}>
-            <Text fontSize={12} color="$fgSubtle" textAlign="center">
-              {tanggalPanjang(data.today.date)} · Shift {data.shift.start}–{data.shift.end}
-            </Text>
-            <Mono fontSize={38} fontWeight="700" marginVertical={2}>
-              {clock}
-            </Mono>
-            {data.today.clockOut ? (
-              <Text fontSize={12.5} color="$fgMuted" marginBottom={15}>
-                Absen {data.today.clockIn?.slice(0, 5)} – {data.today.clockOut.slice(0, 5)} ·
-                selesai hari ini
+          <Card padding={18} gap={14} borderRadius={28}>
+            <XStack alignItems="center" justifyContent="space-between" gap={10}>
+              <Text fontSize={16.5} fontWeight="700" color="$fg" numberOfLines={1}>
+                Kehadiran hari ini
               </Text>
-            ) : clockedIn ? (
-              <Text fontSize={12.5} color="$success" fontWeight="500" marginBottom={15}>
-                Absen masuk {data.today.clockIn?.slice(0, 5)} ·{" "}
-                {data.today.location ?? "lokasi tidak dicatat"}
+              <Text
+                flexShrink={1}
+                fontSize={11.5}
+                color="$fgMuted"
+                backgroundColor="$inset"
+                borderRadius={16}
+                paddingHorizontal={11}
+                paddingVertical={7}
+                numberOfLines={1}
+              >
+                {tanggalPanjang(data.today.date)}
               </Text>
-            ) : (
-              <Text fontSize={12.5} color="$fgMuted" marginBottom={15}>
-                Belum absen masuk hari ini
-              </Text>
-            )}
+            </XStack>
+
+            <XStack
+              gap={12}
+              alignItems="center"
+              backgroundColor="$surface2"
+              borderRadius={22}
+              padding={14}
+            >
+              <YStack flex={1} gap={9}>
+                <XStack
+                  alignSelf="flex-start"
+                  alignItems="center"
+                  gap={6}
+                  backgroundColor="$inset"
+                  borderRadius={15}
+                  paddingHorizontal={9}
+                  paddingVertical={5}
+                >
+                  <Feather name="clock" size={12} color={theme.fgMuted?.val} />
+                  <Text fontSize={11} fontWeight="500" color="$fgMuted">
+                    Shift {data.shift.start}–{data.shift.end}
+                  </Text>
+                </XStack>
+
+                <Text
+                  fontSize={34}
+                  lineHeight={40}
+                  fontWeight="700"
+                  color="$fg"
+                  letterSpacing={-1.3}
+                  fontVariant={["tabular-nums"]}
+                  numberOfLines={1}
+                >
+                  {clock}
+                </Text>
+
+                {data.today.clockOut ? (
+                  <YStack gap={2}>
+                    <Text fontSize={11.5} color="$fgMuted" numberOfLines={1}>
+                      Absen {data.today.clockIn?.slice(0, 5)}–{data.today.clockOut.slice(0, 5)}
+                    </Text>
+                    <Text fontSize={11.5} fontWeight="600" color="$accent">
+                      Selesai hari ini
+                    </Text>
+                  </YStack>
+                ) : clockedIn ? (
+                  <Text fontSize={11.5} color="$accent" fontWeight="600" numberOfLines={2}>
+                    Masuk {data.today.clockIn?.slice(0, 5)} ·{" "}
+                    {data.today.location ?? "lokasi tidak dicatat"}
+                  </Text>
+                ) : (
+                  <Text fontSize={11.5} color="$fgMuted" numberOfLines={2}>
+                    Belum absen masuk hari ini
+                  </Text>
+                )}
+              </YStack>
+
+              <YStack alignItems="center" gap={5} width={108}>
+                <Ring
+                  progress={target ? kerja / target : 0}
+                  size={104}
+                  thickness={9}
+                  colors={GRAD.hadir}
+                  hole="$surface2"
+                >
+                  {data.today.clockOut ? (
+                    <Feather name="check" size={34} color={GRAD.biru[0]} />
+                  ) : (
+                    <Mono fontSize={14} fontWeight="700" color="$fgMuted">
+                      {target ? Math.round((Math.min(kerja, target) / target) * 100) : 0}%
+                    </Mono>
+                  )}
+                </Ring>
+                <XStack alignItems="baseline" gap={3}>
+                  <Text fontSize={13} fontWeight="700" color="$fg">
+                    {durasiJam(kerja)}
+                  </Text>
+                  <Text fontSize={11.5} color="$fgSubtle">
+                    / {durasiJam(target)}
+                  </Text>
+                </XStack>
+                <Text fontSize={10.5} color="$fgSubtle" textAlign="center">
+                  Jam kerja
+                </Text>
+              </YStack>
+            </XStack>
 
             {data.today.clockOut ? (
-              <Btn width="100%" disabled>
-                Absen hari ini selesai
+              <Btn
+                width="100%"
+                height={52}
+                borderRadius={26}
+                disabled
+                icon={<Feather name="check-circle" size={18} color={theme.fgSubtle?.val} />}
+              >
+                <Text fontSize={14} fontWeight="600" color="$fgSubtle" numberOfLines={1}>
+                  Absen hari ini selesai
+                </Text>
               </Btn>
             ) : (
               <Btn
                 width="100%"
-                height={48}
+                height={52}
+                borderRadius={26}
+                overflow="hidden"
                 tone={clockedIn ? "danger" : undefined}
+                icon={
+                  <Feather
+                    name={clockedIn ? "log-out" : "log-in"}
+                    size={18}
+                    color="#fff"
+                  />
+                }
                 onPress={() => router.push("/absen")}
               >
-                {clockedIn ? "Absen keluar" : "Absen masuk sekarang"}
+                <Text fontSize={14} fontWeight="600" color="#fff" numberOfLines={1}>
+                  {clockedIn ? "Absen keluar" : "Absen masuk sekarang"}
+                </Text>
               </Btn>
             )}
 
-            <XStack alignItems="center" justifyContent="center" gap={6} marginTop={11}>
-              <Feather name="map-pin" size={12} color="#8b93a1" />
-              {/* with several offices there is no single radius to quote; the
-                  picker on the punch screen is where the numbers belong */}
-              <Text fontSize={11} color="$fgSubtle">
+            <XStack
+              alignItems="center"
+              gap={10}
+              backgroundColor="$inset"
+              borderRadius={18}
+              paddingHorizontal={12}
+              paddingVertical={10}
+            >
+              <YStack
+                width={30}
+                height={30}
+                borderRadius={15}
+                backgroundColor="$surface2"
+                alignItems="center"
+                justifyContent="center"
+              >
+                <Feather name="map-pin" size={14} color={theme.accent?.val} />
+              </YStack>
+              <Text fontSize={11.5} color="$fgMuted" flex={1} numberOfLines={1}>
                 {data.offices.length === 1
                   ? `${data.offices[0].name} · radius ${data.offices[0].radiusM} m`
                   : data.offices.length
                     ? `${data.offices.length} titik absen tersedia`
-                    : "Belum ada titik absen · absen harus ditandai WFH"}
+                    : "Belum ada titik absen · tandai sebagai WFH"}
               </Text>
             </XStack>
           </Card>
 
-          <XStack gap={9}>
+          <XStack gap={10}>
             {quick.map((q) => (
               <Card
                 key={q.label}
                 flex={1}
-                paddingVertical={12}
-                paddingHorizontal={6}
-                alignItems="center"
+                minHeight={94}
+                borderRadius={24}
+                paddingHorizontal={4}
+                paddingTop={11}
+                paddingBottom={10}
                 gap={7}
-                pressStyle={{ borderColor: "$accentLine" }}
+                alignItems="center"
+                justifyContent="center"
+                pressStyle={{ backgroundColor: "$surface2", borderColor: "$accentLine", scale: 0.97 }}
                 onPress={() => router.push(q.to)}
+                accessibilityRole="button"
+                aria-label={`Buka menu ${q.label}`}
               >
-                <YStack
-                  width={34}
-                  height={34}
-                  borderRadius={11}
-                  backgroundColor={q.bg}
-                  alignItems="center"
-                  justifyContent="center"
+                <IconTile icon={q.icon} fg="#fff" grad={q.grad} size={50} radius={17} />
+                <Text
+                  width="100%"
+                  fontSize={12.5}
+                  lineHeight={16}
+                  fontWeight="600"
+                  color="$fg"
+                  textAlign="center"
                 >
-                  <Feather name={q.icon} size={17} color={tint(q.tint)} />
-                </YStack>
-                <Text fontSize={10.5} fontWeight="500" color="$fgMuted" textAlign="center">
                   {q.label}
                 </Text>
               </Card>
             ))}
           </XStack>
 
-          <YStack gap={10}>
-            <XStack alignItems="center" justifyContent="space-between">
-              <SectionLabel>Rekan hadir hari ini</SectionLabel>
-              <Text
-                fontSize={12}
-                fontWeight="600"
-                color="$accent"
+          <Card padding={18} gap={14} borderRadius={28}>
+            <XStack alignItems="center" justifyContent="space-between" gap={10}>
+              <Text fontSize={16.5} fontWeight="700" color="$fg">
+                Rekan hadir hari ini
+              </Text>
+              <XStack
+                alignItems="center"
+                gap={4}
+                backgroundColor="$accentSubtle"
+                borderRadius={16}
+                paddingHorizontal={11}
+                paddingVertical={7}
+                pressStyle={{ opacity: 0.7, scale: 0.98 }}
                 onPress={() => router.push("/tim")}
+                accessibilityRole="button"
+                aria-label="Lihat tim"
               >
-                Lihat tim
-              </Text>
-            </XStack>
-            <Card flexDirection="row" alignItems="center" gap={12} paddingHorizontal={14}>
-              <XStack>
-                {data.team.avatars.map((t, i) => (
-                  <Avatar
-                    key={t.id}
-                    seed={t.id}
-                    initials={t.initials}
-                    photoKey={t.photoKey}
-                    size={28}
-                    marginLeft={i ? -8 : 0}
-                    borderWidth={2}
-                    borderColor="$surface"
-                  />
-                ))}
+                <Text fontSize={11.5} fontWeight="600" color="$accent">
+                  Lihat tim
+                </Text>
+                <Feather name="chevron-right" size={14} color={theme.accent?.val} />
               </XStack>
-              <Text fontSize={12} color="$fgMuted" flex={1}>
-                {data.team.present} dari {data.team.total} rekan sudah absen masuk
-              </Text>
-            </Card>
-          </YStack>
+            </XStack>
 
-          <Pengumuman />
+            {teamQuery.isPending ? (
+              <SkeletonRows count={2} lead={40} trail={false} />
+            ) : team.avatars.length === 0 ? (
+              <YStack backgroundColor="$surface2" borderRadius={22} padding={14} gap={12}>
+                <XStack alignItems="center" gap={12}>
+                  <IconTile icon="users" fg="#fff" grad={GRAD.biru} size={48} radius={16} />
+                  <YStack flex={1} gap={3}>
+                    <Text fontSize={13.5} fontWeight="600" color="$fg">
+                      Belum ada rekan hadir
+                    </Text>
+                    <Text fontSize={11.5} lineHeight={16} color="$fgSubtle">
+                      Rekan yang absen masuk akan muncul di sini.
+                    </Text>
+                  </YStack>
+                </XStack>
+                <XStack
+                  alignItems="center"
+                  justifyContent="space-between"
+                  backgroundColor="$inset"
+                  borderRadius={17}
+                  paddingHorizontal={12}
+                  paddingVertical={10}
+                >
+                  <Text fontSize={11.5} fontWeight="500" color="$fgMuted">
+                    Kehadiran tim
+                  </Text>
+                  <XStack alignItems="baseline" gap={4}>
+                    <Text fontSize={16} fontWeight="700" color="$fg">
+                      {team.present}
+                    </Text>
+                    <Text fontSize={11.5} color="$fgSubtle">
+                      dari {team.total}
+                    </Text>
+                  </XStack>
+                </XStack>
+              </YStack>
+            ) : (
+              <YStack gap={10}>
+                <XStack
+                  alignItems="center"
+                  backgroundColor="$surface2"
+                  borderRadius={22}
+                  paddingHorizontal={10}
+                  paddingVertical={14}
+                >
+                  <XStack flex={1} alignItems="center" justifyContent="space-around">
+                    {team.avatars.map((t) => (
+                      <YStack key={t.id} alignItems="center" gap={5} width={44}>
+                        <YStack>
+                          <Avatar
+                            seed={t.id}
+                            initials={t.initials}
+                            photoKey={isFocused ? t.photoKey : null}
+                            size={36}
+                          />
+                          <YStack
+                            position="absolute"
+                            right={-1}
+                            bottom={-1}
+                            width={11}
+                            height={11}
+                            borderRadius={6}
+                            backgroundColor="$success"
+                            borderWidth={2}
+                            borderColor="$surface2"
+                          />
+                        </YStack>
+                        {t.name ? (
+                          <Text fontSize={9.5} color="$fgMuted" textAlign="center">
+                            {t.name.split(" ")[0]}
+                          </Text>
+                        ) : null}
+                      </YStack>
+                    ))}
+                    {sisaRekan > 0 ? (
+                      <YStack
+                        width={44}
+                        height={44}
+                        borderRadius={22}
+                        backgroundColor="$inset"
+                        alignItems="center"
+                        justifyContent="center"
+                      >
+                        <Text fontSize={11.5} fontWeight="600" color="$fgMuted">
+                          +{sisaRekan}
+                        </Text>
+                      </YStack>
+                    ) : null}
+                  </XStack>
+                </XStack>
+                <XStack
+                  alignItems="center"
+                  justifyContent="space-between"
+                  backgroundColor="$inset"
+                  borderRadius={17}
+                  paddingHorizontal={12}
+                  paddingVertical={10}
+                >
+                  <Text fontSize={11.5} fontWeight="500" color="$fgMuted">
+                    Sudah absen masuk
+                  </Text>
+                  <XStack alignItems="baseline" gap={4}>
+                    <Text fontSize={16} fontWeight="700" color="$fg">
+                      {team.present}
+                    </Text>
+                    <Text fontSize={11.5} color="$fgSubtle">
+                      dari {team.total} rekan
+                    </Text>
+                  </XStack>
+                </XStack>
+              </YStack>
+            )}
+          </Card>
+
+          <Pengumuman preview={data.announcements} />
         </YStack>
       </ScrollView>
     </Screen>
@@ -248,100 +604,103 @@ export default function Beranda() {
 }
 
 /**
- * The Beranda while /api/me is in flight. The gradient header and the card
- * geometry are static, so they are drawn for real and only the values are
- * skeletons — the screen that appears at launch is then the screen that stays,
- * with the numbers filling in rather than the whole layout replacing a spinner.
+ * The Beranda while /api/me is in flight.
  *
- * Blocks on the header use a translucent white instead of a theme token: $inset
- * over indigo would be a light-grey patch.
+ * Ia mereplikasi geometri layar sungguhan — kartu, ubin, cincin — supaya layar
+ * yang muncul saat peluncuran adalah layar yang kemudian menetap, dengan angkanya
+ * yang terisi belakangan alih-alih seluruh tata letak berganti bentuk.
  */
 function BerandaSkeleton() {
   const insets = useSafeAreaInsets();
-  const onHeader = "rgba(255,255,255,.28)";
 
   return (
     <Screen>
-      <LinearGradient
-        colors={[...HEADER_GRADIENT]}
-        start={[0, 0]}
-        end={[0.6, 1]}
-        paddingTop={insets.top + 10}
-        paddingHorizontal={22}
-        paddingBottom={58}
-      >
-        <XStack alignItems="center" justifyContent="space-between" paddingBottom={18}>
-          <YStack gap={7} flex={1}>
-            <Skeleton width="34%" height={10} color={onHeader} />
-            <Skeleton width="58%" height={15} color={onHeader} />
-            <Skeleton width="46%" height={9} color={onHeader} />
-          </YStack>
-          <Skeleton width={44} height={44} radius={22} color={onHeader} />
-        </XStack>
-        <XStack gap={9}>
-          {[0, 1, 2].map((i) => (
-            <YStack
-              key={i}
-              flex={1}
-              backgroundColor="rgba(255,255,255,.14)"
-              borderRadius={12}
-              padding={10}
-              gap={7}
-            >
-              <Skeleton width="62%" height={9} color={onHeader} />
-              <Skeleton width="80%" height={12} color={onHeader} />
+      <YStack paddingHorizontal={18} paddingTop={insets.top + 10} gap={14}>
+        <Card padding={18} borderRadius={28}>
+          <XStack alignItems="center" justifyContent="space-between" gap={14}>
+            <YStack gap={9} flex={1}>
+              <Skeleton width="34%" height={10} />
+              <Skeleton width="68%" height={21} />
+              <XStack gap={7}>
+                <Skeleton width={72} height={27} radius={14} />
+                <Skeleton width={92} height={27} radius={14} />
+              </XStack>
             </YStack>
-          ))}
-        </XStack>
-      </LinearGradient>
-
-      <YStack paddingHorizontal={18} marginTop={-40} gap={16}>
-        <Card padding={19} alignItems="center" gap={11} elevation={8}>
-          <Skeleton width="66%" height={9} />
-          <Skeleton width="44%" height={30} radius={9} />
-          <Skeleton width="52%" height={9} />
-          <Skeleton height={48} radius={12} />
+            <Skeleton width={64} height={64} radius={32} />
+          </XStack>
         </Card>
 
-        <XStack gap={9}>
-          {[0, 1, 2, 3].map((i) => (
-            <Card key={i} flex={1} paddingVertical={13} alignItems="center" gap={8}>
-              <Skeleton width={34} height={34} radius={11} />
-              <Skeleton width="72%" height={8} />
+        <XStack gap={10}>
+          {[0, 1].map((i) => (
+            <Card key={i} flex={1} minHeight={80} padding={12} justifyContent="center">
+              <XStack alignItems="center" gap={8}>
+                <Skeleton width={52} height={52} radius={16} />
+                <YStack flex={1} height={52} justifyContent="space-between">
+                  <Skeleton width="58%" height={9} />
+                  <Skeleton width="78%" height={14} />
+                  <Skeleton width="52%" height={8} />
+                </YStack>
+              </XStack>
             </Card>
           ))}
         </XStack>
 
-        <SkeletonRows count={1} lead={28} trail={false} />
+        <Card padding={18} gap={14} borderRadius={28}>
+          <XStack alignItems="center" justifyContent="space-between">
+            <Skeleton width="42%" height={14} />
+            <Skeleton width="37%" height={28} radius={14} />
+          </XStack>
+          <XStack
+            gap={12}
+            alignItems="center"
+            backgroundColor="$surface2"
+            borderRadius={22}
+            padding={14}
+          >
+            <YStack flex={1} gap={10}>
+              <Skeleton width="68%" height={24} radius={12} />
+              <Skeleton width="88%" height={31} radius={8} />
+              <Skeleton width="76%" height={10} />
+            </YStack>
+            <Skeleton width={104} height={104} radius={52} />
+          </XStack>
+          <Skeleton height={52} radius={26} />
+          <Skeleton height={50} radius={18} />
+        </Card>
+
+        <XStack gap={10}>
+          {[0, 1, 2, 3].map((i) => (
+            <Card
+              key={i}
+              flex={1}
+              minHeight={94}
+              borderRadius={24}
+              paddingVertical={10}
+              alignItems="center"
+              justifyContent="center"
+              gap={7}
+            >
+              <Skeleton width={50} height={50} radius={17} />
+              <Skeleton width="54%" height={10} />
+            </Card>
+          ))}
+        </XStack>
+
+        <Card padding={18} gap={14} borderRadius={28}>
+          <XStack alignItems="center" justifyContent="space-between">
+            <Skeleton width="46%" height={14} />
+            <Skeleton width={74} height={28} radius={14} />
+          </XStack>
+          <YStack backgroundColor="$surface2" borderRadius={22} padding={14} gap={12}>
+            <XStack justifyContent="space-around">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <Skeleton key={i} width={36} height={36} radius={18} />
+              ))}
+            </XStack>
+            <Skeleton height={36} radius={17} />
+          </YStack>
+        </Card>
       </YStack>
     </Screen>
   );
 }
-
-function HeaderStat({
-  label,
-  value,
-  numeric,
-}: {
-  label: string;
-  value: string;
-  numeric?: boolean;
-}) {
-  return (
-    <YStack flex={1} backgroundColor="rgba(255,255,255,.14)" borderRadius={12} padding={10}>
-      <Text fontSize={11} color="#fff" opacity={0.85}>
-        {label}
-      </Text>
-      {numeric ? (
-        <Mono fontSize={14} fontWeight="600" color="#fff" marginTop={1}>
-          {value}
-        </Mono>
-      ) : (
-        <Text fontSize={14} fontWeight="600" color="#fff" marginTop={1}>
-          {value}
-        </Text>
-      )}
-    </YStack>
-  );
-}
-

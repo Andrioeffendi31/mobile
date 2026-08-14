@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { RefreshControl } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useIsFocused } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScrollView, Text, XStack, YStack } from "tamagui";
@@ -50,8 +50,10 @@ const group = (status: string): Filter =>
  */
 export default function Tim() {
   const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [refreshing, setRefreshing] = useState(false);
 
   // same rule as Kehadiran: a search typed last visit would hide half the team
   // from somebody who came back expecting the list
@@ -65,7 +67,21 @@ export default function Tim() {
     ),
   );
 
-  const q = useQuery({ queryKey: ["team"], queryFn: () => get<Team>("/api/me/team") });
+  const q = useQuery({
+    queryKey: ["team"],
+    queryFn: ({ signal }) => get<Team>("/api/me/team", { signal }),
+    enabled: isFocused,
+  });
+
+  const refresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await q.refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const members = q.data?.members ?? [];
   const visible = useMemo(() => {
@@ -82,7 +98,9 @@ export default function Tim() {
   return (
     <Screen paddingTop={insets.top}>
       <ScrollView
-        refreshControl={<RefreshControl refreshing={q.isFetching} onRefresh={() => q.refetch()} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
+        }
         contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: 28 }}
         keyboardShouldPersistTaps="handled"
       >
@@ -130,7 +148,11 @@ export default function Tim() {
           <YStack gap={8}>
             {visible.map((m) => (
               <Card key={m.id} flexDirection="row" alignItems="center" gap={11} paddingHorizontal={13}>
-                <Avatar seed={m.id} initials={m.initials} photoKey={m.photoKey} />
+                <Avatar
+                  seed={m.id}
+                  initials={m.initials}
+                  photoKey={isFocused ? m.photoKey : null}
+                />
                 <YStack flex={1}>
                   <Text fontSize={13.5} fontWeight="500" color="$fg" numberOfLines={1}>
                     {m.name}
