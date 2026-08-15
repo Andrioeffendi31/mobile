@@ -15,6 +15,7 @@ import {
   ErrorNote,
   Input,
   Mono,
+  PageIntro,
   Screen,
   Skeleton,
 } from "@/ui";
@@ -116,7 +117,7 @@ export default function Tim() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
         }
-        contentContainerStyle={{ paddingHorizontal: 18, paddingTop: insets.top + 22, paddingBottom: 28 }}
+        contentContainerStyle={{ paddingHorizontal: 18, paddingTop: insets.top + 18, paddingBottom: 28 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         initialNumToRender={9}
@@ -124,21 +125,11 @@ export default function Tim() {
         windowSize={7}
         removeClippedSubviews
         ListHeaderComponent={
-          <YStack gap={16} paddingBottom={12}>
-            <YStack gap={5}>
-              <Text
-                fontSize={30}
-                lineHeight={36}
-                fontWeight="700"
-                letterSpacing={-0.8}
-                color="$fg"
-              >
-                Kehadiran tim
-              </Text>
-              <Text fontSize={13} lineHeight={19} color="$fgMuted">
-                {q.data ? tanggalPanjang(q.data.date) : "Memuat data hari ini"}
-              </Text>
-            </YStack>
+          <YStack gap={14} paddingBottom={11}>
+            <PageIntro
+              title="Kehadiran tim"
+              subtitle={q.data ? tanggalPanjang(q.data.date) : "Memuat data hari ini"}
+            />
 
             <Card
               borderRadius={28}

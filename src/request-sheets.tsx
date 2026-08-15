@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as DocumentPicker from "expo-document-picker";
 import * as Linking from "expo-linking";
 import { Feather } from "@expo/vector-icons";
-import { Text, XStack, YStack } from "tamagui";
+import { ScrollView, Text, XStack, YStack } from "tamagui";
 import { tint } from "@/theme";
 import { type RequestItem, get, postForm, postJson } from "@/api";
 import { DateInput, TimeInput } from "@/date-input";
@@ -143,7 +143,7 @@ export function LeaveSheet({
     <SheetShell
       open={open}
       onClose={onClose}
-      title={!request ? "Ajukan Cuti" : editable ? "Perbaiki Pengajuan" : request.title}
+      title={!request ? "Ajukan cuti" : editable ? "Perbaiki pengajuan" : request.title}
       /**
        * No back button: the sheet already closes by its handle, by dragging down,
        * and by tapping the overlay — a fourth way to leave was taking width from
@@ -211,19 +211,19 @@ export function LeaveSheet({
       ) : null}
 
       <Field label="Jenis cuti">
-        <YStack gap={7}>
-          {LEAVE_TYPES.map((t) => {
+        <YStack borderRadius={20} overflow="hidden" borderWidth={1} borderColor="$line">
+          {LEAVE_TYPES.map((t, index) => {
             const on = t.value === type;
             return (
               <XStack
                 key={t.value}
+                minHeight={64}
                 alignItems="center"
                 gap={11}
                 paddingHorizontal={13}
-                paddingVertical={11}
-                borderRadius={11}
-                borderWidth={1}
-                borderColor={on ? "$accent" : "$lineStrong"}
+                paddingVertical={9}
+                borderBottomWidth={index === LEAVE_TYPES.length - 1 ? 0 : 1}
+                borderBottomColor="$line"
                 backgroundColor={on ? "$accentSubtle" : "$surface"}
                 // a decided request shows which type it was, it does not offer the
                 // other two: dimming only the unselected rows keeps the answer legible
@@ -307,7 +307,8 @@ export function LeaveSheet({
       </Field>
 
       <Field label="Pengganti selama cuti (opsional)">
-        <XStack gap={7} flexWrap="wrap">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <XStack gap={7} paddingRight={8}>
           {/* read-only: just the answer, not the alternatives nobody can pick */}
           {editable ? (
             <>
@@ -328,7 +329,8 @@ export function LeaveSheet({
           ) : (
             <Pill label={request?.delegateName ?? "Tidak ada"} on onPress={() => {}} />
           )}
-        </XStack>
+          </XStack>
+        </ScrollView>
       </Field>
 
       {submit.isError ? (
@@ -411,7 +413,7 @@ export function OvertimeSheet({
     <SheetShell
       open={open}
       onClose={onClose}
-      title={viewing ? (request!.title ?? "Lembur") : "Ajukan Lembur"}
+      title={viewing ? (request!.title ?? "Lembur") : "Ajukan lembur"}
       /** same footer rules as the leave sheet — minus a submit, since overtime has
        *  no edit endpoint to submit to */
       footer={

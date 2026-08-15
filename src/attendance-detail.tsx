@@ -7,7 +7,7 @@ import { API, type AttendanceDay, get, useSession } from "@/api";
 import { durasiJam, formatJarak, tanggalPanjang } from "@/format";
 import { Peta, type Titik } from "@/peta";
 import { tint } from "@/theme";
-import { AttBadge, Mono, Note, Readout, SheetShell, Skeleton, useAndroidBack } from "@/ui";
+import { AttBadge, Mono, Note, SheetShell, Skeleton, useAndroidBack } from "@/ui";
 
 /**
  * One day of attendance, opened from a card in Kehadiran.
@@ -72,8 +72,8 @@ export function AttendanceDetailSheet({
 /** Section heading for a reading view — Field's label is sized for a form row. */
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <YStack gap={9}>
-      <Text fontSize={13.5} fontWeight="600" color="$fg">
+    <YStack gap={10}>
+      <Text fontSize={16} lineHeight={21} fontWeight="700" color="$fg">
         {label}
       </Text>
       {children}
@@ -123,17 +123,51 @@ function Day({ day }: { day: AttendanceDay }) {
 
   return (
     <>
-      <XStack alignItems="center" gap={8} flexWrap="wrap">
-        <AttBadge status={day.status} />
-        <Text fontSize={12.5} color="$fgSubtle">
-          Shift {day.shift.start}–{day.shift.end}
-        </Text>
-      </XStack>
+      <YStack
+        backgroundColor="$surface2"
+        borderRadius={24}
+        padding={16}
+        gap={15}
+        overflow="hidden"
+      >
+        <YStack
+          position="absolute"
+          width={112}
+          height={112}
+          borderRadius={56}
+          backgroundColor="$accentSubtle"
+          right={-34}
+          top={-48}
+          opacity={0.7}
+          pointerEvents="none"
+        />
+        <XStack alignItems="center" justifyContent="space-between" gap={12}>
+          <YStack gap={4}>
+            <Text fontSize={11.5} fontWeight="500" color="$fgMuted">
+              Status kehadiran
+            </Text>
+            <AttBadge status={day.status} />
+          </YStack>
+          <XStack
+            alignItems="center"
+            gap={7}
+            backgroundColor="$inset"
+            borderRadius={14}
+            paddingHorizontal={11}
+            paddingVertical={8}
+          >
+            <Feather name="clock" size={14} color={tint("$fgMuted")} />
+            <Text fontSize={11.5} fontWeight="600" color="$fgMuted">
+              {day.shift.start}–{day.shift.end}
+            </Text>
+          </XStack>
+        </XStack>
 
-      <XStack gap={9}>
-        <Clock label="Absen masuk" value={day.in} />
-        <Clock label="Absen keluar" value={day.out} />
-      </XStack>
+        <XStack gap={9}>
+          <Clock label="Absen masuk" value={day.in} icon="log-in" />
+          <Clock label="Absen keluar" value={day.out} icon="log-out" />
+        </XStack>
+      </YStack>
 
       {/* Kalau hari ini tercatat tanpa keterangan padahal Anda sudah mengajukan izin,
           alasan penolakannya ada di sini, bukan hanya di riwayat pengajuan. */}
@@ -145,10 +179,24 @@ function Day({ day }: { day: AttendanceDay }) {
         />
       ) : null}
 
-      {day.location ? <Readout label="Lokasi tercatat" value={day.location} /> : null}
-      {/* which geofence the day was judged against — the trail's distances below
-          are measured from this point, not from wherever is nearest today */}
-      <Readout label="Titik absen" value={day.office ?? "Tanpa titik kantor (WFH)"} />
+      <YStack
+        backgroundColor="$surface2"
+        borderRadius={22}
+        paddingHorizontal={15}
+        overflow="hidden"
+      >
+        {day.location ? (
+          <InfoRow icon="map-pin" label="Lokasi tercatat" value={day.location} />
+        ) : null}
+        {/* which geofence the day was judged against — the trail's distances below
+            are measured from this point, not from wherever is nearest today */}
+        <InfoRow
+          icon="navigation"
+          label="Titik absen"
+          value={day.office ?? "Tanpa titik kantor (WFH)"}
+          divider={Boolean(day.location)}
+        />
+      </YStack>
       {day.note ? <Note text={day.note} fg="$fgMuted" bg="$inset" /> : null}
 
       {/* the trail the list below spells out, as one picture — the ping that fell
@@ -177,8 +225,8 @@ function Day({ day }: { day: AttendanceDay }) {
         <Section label="Foto absen">
           <YStack
             width="100%"
-            aspectRatio={3 / 4}
-            borderRadius={14}
+            aspectRatio={4 / 3}
+            borderRadius={22}
             overflow="hidden"
             backgroundColor="$inset"
             pressStyle={{ opacity: 0.85 }}
@@ -193,6 +241,19 @@ function Day({ day }: { day: AttendanceDay }) {
               resizeMode="cover"
               accessibilityLabel="Foto absen hari ini"
             />
+            <XStack
+              position="absolute"
+              right={12}
+              bottom={12}
+              width={38}
+              height={38}
+              borderRadius={15}
+              alignItems="center"
+              justifyContent="center"
+              backgroundColor="rgba(20,22,27,.62)"
+            >
+              <Feather name="maximize-2" size={16} color="#fff" />
+            </XStack>
           </YStack>
         </Section>
       ) : null}
@@ -203,7 +264,13 @@ function Day({ day }: { day: AttendanceDay }) {
             Tidak ada kejadian tercatat.
           </Text>
         ) : (
-          <YStack>
+          <YStack
+            backgroundColor="$surface2"
+            borderRadius={22}
+            paddingHorizontal={14}
+            paddingTop={14}
+            paddingBottom={14}
+          >
             {day.events.map((e, i) => {
               const kind = KIND[e.kind];
               const last = i === day.events.length - 1;
@@ -394,13 +461,66 @@ function PhotoPreview({
   );
 }
 
-function Clock({ label, value }: { label: string; value: string }) {
+function InfoRow({
+  icon,
+  label,
+  value,
+  divider = false,
+}: {
+  icon: React.ComponentProps<typeof Feather>["name"];
+  label: string;
+  value: string;
+  divider?: boolean;
+}) {
   return (
-    <YStack flex={1} backgroundColor="$surface2" borderRadius={12} padding={12} gap={3}>
-      <Text fontSize={12} color="$fgSubtle">
-        {label}
-      </Text>
-      <Mono fontSize={18} fontWeight="700">
+    <XStack
+      minHeight={66}
+      alignItems="center"
+      gap={12}
+      paddingVertical={12}
+      borderTopWidth={divider ? 1 : 0}
+      borderTopColor="$line"
+    >
+      <YStack
+        width={38}
+        height={38}
+        borderRadius={14}
+        alignItems="center"
+        justifyContent="center"
+        backgroundColor="$inset"
+      >
+        <Feather name={icon} size={16} color={tint("$fgMuted")} />
+      </YStack>
+      <YStack flex={1} gap={2}>
+        <Text fontSize={10.5} fontWeight="500" color="$fgSubtle">
+          {label}
+        </Text>
+        <Text fontSize={12.5} lineHeight={18} fontWeight="500" color="$fg">
+          {value}
+        </Text>
+      </YStack>
+    </XStack>
+  );
+}
+
+function Clock({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: string;
+  icon: React.ComponentProps<typeof Feather>["name"];
+}) {
+  return (
+    <YStack flex={1} backgroundColor="$surface" borderRadius={18} padding={13} gap={8}>
+      <XStack alignItems="center" gap={7}>
+        <Feather name={icon} size={14} color={tint("$accent")} />
+        <Text fontSize={11} color="$fgSubtle">
+          {label}
+        </Text>
+      </XStack>
+      <Mono fontSize={21} lineHeight={26} fontWeight="700">
         {value || "—"}
       </Mono>
     </YStack>

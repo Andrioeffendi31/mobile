@@ -69,6 +69,30 @@ export const Title = styled(Text, {
   marginBottom: 14,
 });
 
+/**
+ * Large intro used by the three data-heavy tab roots. Kept separate from
+ * PageHeader: these titles scroll with a FlatList, while PageHeader is a fixed
+ * safe-area header for settings/detail screens.
+ */
+export function PageIntro({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <YStack gap={3}>
+      <Text
+        fontSize={28}
+        lineHeight={33}
+        fontWeight="700"
+        letterSpacing={-0.8}
+        color="$fg"
+      >
+        {title}
+      </Text>
+      <Text fontSize={12.5} lineHeight={18} color="$fgMuted">
+        {subtitle}
+      </Text>
+    </YStack>
+  );
+}
+
 export const SectionLabel = styled(Text, {
   fontSize: 13.5,
   fontWeight: "600",
