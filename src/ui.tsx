@@ -507,19 +507,42 @@ export function Toggle({
   );
 }
 
-/** The small caps-ish label above a settings group ("Keamanan", "Notifikasi"). */
+/**
+ * Judul seksi di atas sebuah <Group>, mengikuti One UI: rata kiri dengan teks di
+ * dalam kartunya (bukan dengan tepi kartunya), berukuran sedang dan berwarna
+ * $accent. Samsung memakai warna aksen di sini justru karena labelnya kecil —
+ * abu-abu 11px yang dipakai sebelumnya hilang di antara dua kartu putih.
+ *
+ * Sentence case, bukan HURUF BESAR SEMUA: One UI menulis "Keamanan dan privasi".
+ */
 export const GroupLabel = styled(Text, {
-  fontSize: 11.5,
+  fontSize: 13,
   fontWeight: "600",
-  color: "$fgMuted",
-  marginHorizontal: 2,
+  color: "$accent",
+  marginLeft: 20,
+  letterSpacing: 0.1,
 });
 
 /**
- * A labelled block of <Row>s in one clipped card — the shape the Pengaturan
- * mockup repeats for every section. The 1px rule between rows is drawn here
- * rather than by each row, so a conditionally rendered row cannot leave a
- * dangling divider behind (Children.toArray drops the nulls first).
+ * Sekelompok <Row> dalam satu kartu membulat — bentuk yang diulang One UI di
+ * seluruh aplikasi Pengaturan-nya.
+ *
+ * Tiga hal yang membuatnya One UI dan bukan "daftar dengan kartu":
+ *
+ * 1. Radius 26. Angka itu bukan selera: One UI memakai sudut yang jauh lebih
+ *    besar daripada Material, dan pada kartu selebar layar radius 16 terbaca
+ *    sebagai persegi yang ujungnya sedikit tumpul.
+ * 2. Tidak ada garis pemisah antarbaris. Pemisahnya jarak dan tinggi baris.
+ *    Garis 1px di antara baris adalah kebiasaan iOS/Material; One UI melepasnya,
+ *    dan itu yang membuat satu kartu terbaca sebagai satu blok utuh.
+ * Garis tepi dan bayangannya tetap mengikuti <Card>: One UI murni memisahkan
+ * kartu dari halaman lewat nada permukaan saja, tapi setiap layar lain di
+ * aplikasi ini bergaris — dan satu halaman tanpa garis di antaranya terbaca
+ * sebagai kartu yang gagal dirender, bukan sebagai gaya.
+ *
+ * Anaknya dihitung lebih dulu supaya grup yang seluruh barisnya ternyata `null`
+ * (mis. Keamanan pada perangkat tanpa biometrik) tidak meninggalkan kartu kosong
+ * setinggi 12px di tengah halaman.
  */
 export function Group({
   label,
@@ -530,18 +553,10 @@ export function Group({
   if (rows.length === 0) return null;
 
   return (
-    <YStack gap={8} {...rest}>
+    <YStack gap={9} {...rest}>
       {label ? <GroupLabel>{label}</GroupLabel> : null}
-      <Card padding={0} overflow="hidden">
-        {rows.map((row, i) =>
-          i === 0 ? (
-            row
-          ) : (
-            <YStack key={i} borderTopWidth={1} borderTopColor="$line">
-              {row}
-            </YStack>
-          ),
-        )}
+      <Card padding={0} paddingVertical={6} borderRadius={26} overflow="hidden">
+        {rows}
       </Card>
     </YStack>
   );
@@ -845,8 +860,22 @@ export function CardHead({
   );
 }
 
+/**
+ * Satu baris di dalam <Group>.
+ *
+ * Ukurannya mengikuti One UI, dan angkanya berbeda cukup jauh dari sebelumnya
+ * untuk perlu disebut: tinggi minimum 64 (dari 54), sisi 20 (dari 14), judul 15,5
+ * (dari 13,5). One UI memang lapang — ia menukar jumlah baris yang muat di satu
+ * layar dengan baris yang bisa ditekan tanpa melihat, dan itu tukar-tambah yang
+ * benar untuk layar yang dibuka sambil berjalan ke kantor.
+ *
+ * Latarnya transparan, bukan $surface: kartu di <Group> yang memegang warnanya,
+ * jadi baris pertama dan terakhir ikut membulat bersama kartunya. Yang ditekan
+ * memakai $inset — One UI menggelapkan barisnya, bukan mengangkatnya.
+ */
 export function Row({
   label,
+  labelTone = "$fg",
   note,
   noteTone = "$fgSubtle",
   icon,
@@ -860,6 +889,8 @@ export function Row({
   onPress,
 }: {
   label: string;
+  /** token — baris yang merusak sesuatu (keluar dari akun) memakai $danger */
+  labelTone?: string;
   note?: string;
   /** token — a note that reports a problem is worth $warning or $danger */
   noteTone?: string;
@@ -878,27 +909,26 @@ export function Row({
 
   return (
     <XStack
-      minHeight={54}
-      paddingHorizontal={14}
-      paddingVertical={11}
+      minHeight={64}
+      paddingHorizontal={20}
+      paddingVertical={13}
       alignItems="center"
-      gap={12}
-      backgroundColor="$surface"
+      gap={16}
       opacity={disabled ? 0.45 : 1}
       onPress={live ? onPress : undefined}
-      pressStyle={live ? { backgroundColor: "$surface2" } : undefined}
+      pressStyle={live ? { backgroundColor: "$inset" } : undefined}
       accessibilityRole={onPress ? "button" : undefined}
       accessibilityState={{ disabled: disabled || loading, busy: loading }}
       aria-label={note ? `${label}. ${note}` : label}
     >
-      {icon ? <IconTile icon={icon} fg={iconFg} bg={iconBg} radius={10} /> : null}
+      {icon ? <IconTile icon={icon} fg={iconFg} bg={iconBg} size={38} radius={13} /> : null}
 
-      <YStack flex={1} gap={2}>
-        <Text fontSize={13.5} fontWeight="500" color="$fg">
+      <YStack flex={1} gap={3}>
+        <Text fontSize={15} fontWeight="500" color={labelTone} lineHeight={20}>
           {label}
         </Text>
         {note ? (
-          <Text fontSize={11.5} color={noteTone} lineHeight={16}>
+          <Text fontSize={12.5} color={noteTone} lineHeight={17}>
             {note}
           </Text>
         ) : null}
@@ -906,12 +936,12 @@ export function Row({
 
       {loading ? <Spinner size="small" color="$fgSubtle" /> : right}
       {value && !loading ? (
-        <Text fontSize={12} color="$fgSubtle" maxWidth={120} numberOfLines={1}>
+        <Text fontSize={13.5} color="$fgSubtle" maxWidth={130} numberOfLines={1}>
           {value}
         </Text>
       ) : null}
       {chevron ? (
-        <Feather name="chevron-right" size={15} color={tint("$fgSubtle")} />
+        <Feather name="chevron-right" size={18} color={tint("$fgSubtle")} />
       ) : null}
     </XStack>
   );

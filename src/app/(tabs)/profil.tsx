@@ -201,7 +201,7 @@ function KontakSheet({
       onClose={onClose}
       title="Ubah kontak"
       footer={
-        <Btn disabled={save.isPending} onPress={() => save.mutate()}>
+        <Btn flex={1} disabled={save.isPending} onPress={() => save.mutate()}>
           {save.isPending ? "Menyimpan…" : "Simpan"}
         </Btn>
       }

@@ -1,16 +1,19 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { Animated } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Linking from "expo-linking";
 import { useIsFocused, useRouter } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ScrollView, Text, YStack } from "tamagui";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Text, YStack, useTheme } from "tamagui";
 import { type Bootstrap, get, logout, postForm } from "@/api";
 import { canPingInBackground } from "@/background-ping";
 import { canProcessImages, toWebp } from "@/image";
 import { available as passkeyAvailable, enrollPasskey } from "@/passkey";
 import { registerForPush, unregisterFromPush, usePushStatus } from "@/push";
 import { usePrefs } from "@/prefs";
+import { tint } from "@/theme";
 import { toast } from "@/toast";
 import {
   Avatar,
@@ -22,28 +25,43 @@ import {
   Group,
   GroupLabel,
   Mono,
-  PageHeader,
   Row,
   Screen,
   Segmented,
-  SkeletonRows,
+  Skeleton,
   Toggle,
 } from "@/ui";
 
 /**
- * Pengaturan (the mockup's `isSettings` view) — the fifth tab, in place of the
- * old "Info & Berkas". Announcements belong on the Beranda, where an employee
- * already looks every morning; berkas and tentang are sub-pages of this screen;
- * what is left is one screen about the account and the app rather than a tab
- * that mixed the two.
+ * Pengaturan — dirancang ulang mengikuti One UI (§ redesign-existing-projects).
  *
- * Every row here is backed by something that already exists — a stored
- * preference, an OS permission, a passkey endpoint, the query cache. Nothing is
- * a placeholder toggle: a setting that does not take effect is worse than a
- * setting that is missing.
+ * Yang membuat sebuah layar terbaca sebagai One UI bukan warnanya, melainkan tiga
+ * hal yang semuanya soal jangkauan ibu jari pada ponsel 6,7 inci:
+ *
+ * 1. **Judul besar yang menyusut.** Sepertiga layar bagian atas sengaja dibiarkan
+ *    kosong selain sebuah judul 32px. Ia bukan hiasan: ia mendorong baris pertama
+ *    yang bisa ditekan turun ke separuh bawah layar, dan ia menyusut menjadi bar
+ *    ringkas begitu digulirkan sehingga ruang itu dikembalikan.
+ * 2. **Kartu membulat besar tanpa garis pemisah** — lihat <Group> di ui.tsx.
+ * 3. **Baris yang lapang** (64px, sisi 20px) dan judul seksi berwarna aksen.
+ *
+ * Setiap baris di sini tetap didukung sesuatu yang sungguh ada — preferensi
+ * tersimpan, izin OS, endpoint passkey, cache query. Tidak ada sakelar hiasan:
+ * setelan yang tidak berpengaruh lebih buruk daripada setelan yang tidak ada.
  */
+
+/**
+ * Tinggi judul besar sampai batas bawahnya — dipakai untuk memilih kapan bar
+ * ringkas muncul, bukan untuk menyisakan ruang di atasnya. Jarak dari status bar
+ * sama persis dengan Kehadiran dan Tim (insets.top + 18): One UI melapangkan
+ * layar lewat ukuran hurufnya, bukan dengan mendorong judulnya ke tengah.
+ */
+const JUDUL = 56;
+
 export default function Pengaturan() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const theme = useTheme();
   const isFocused = useIsFocused();
   const avatar = useAvatarUpload();
   const qc = useQueryClient();
@@ -68,6 +86,21 @@ export default function Pengaturan() {
 
   const [confirmKeluar, setConfirmKeluar] = useState(false);
 
+  /**
+   * Posisi gulir, sebagai Animated.Value dan bukan state React.
+   *
+   * `useNativeDriver` memindahkan interpolasinya ke thread UI, jadi bar ringkas
+   * memudar tanpa satu pun render React per frame. Menyimpannya sebagai state
+   * berarti me-render ulang seluruh layar Pengaturan enam puluh kali per detik
+   * selama jari masih menyentuh layar.
+   */
+  const gulir = useRef(new Animated.Value(0)).current;
+  const barMuncul = gulir.interpolate({
+    inputRange: [JUDUL * 0.3, JUDUL],
+    outputRange: [0, 1],
+    extrapolate: "clamp",
+  });
+
   // clear the cache too: the next person to sign in on this phone must not see
   // the previous employee's cached leave balance for a frame
   const keluar = async () => {
@@ -78,20 +111,65 @@ export default function Pengaturan() {
 
   return (
     <Screen>
-      {/* a tab root, so no back button — the tab bar is the way out */}
-      <PageHeader title="Pengaturan" subtitle="Akun, berkas, keamanan dan preferensi" />
-
-      <ScrollView
-        // the tab bar already carries the bottom inset, like every other screen
-        contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: 28, gap: 19 }}
+      <Animated.ScrollView
+        scrollEventThrottle={16}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: gulir } } }], {
+          useNativeDriver: true,
+        })}
+        contentContainerStyle={{
+          paddingTop: insets.top + 18,
+          paddingHorizontal: 16,
+          paddingBottom: 32,
+          gap: 18,
+        }}
       >
+        {/* Judul besar One UI. Tanpa subjudul, tidak seperti Kehadiran: nama
+            layarnya sudah ada di tab bar, dan "Akun, berkas, keamanan dan
+            preferensi" hanya membacakan ulang daftar yang persis ada di bawahnya. */}
+        <Text
+          fontSize={32}
+          lineHeight={38}
+          fontWeight="700"
+          color="$fg"
+          letterSpacing={-0.9}
+          paddingLeft={4}
+        >
+          Pengaturan
+        </Text>
+
         {me.isPending ? (
-          // the identity card: avatar, name, NIK, status chip
-          <SkeletonRows count={1} lead={42} />
+          // bentuknya persis kartu akun di bawah, sampai ke radius 26-nya: yang
+          // muncul saat menunggu harus layar yang sama, dengan isinya menyusul
+          <Card flexDirection="row" borderRadius={26} padding={18} gap={15}>
+            <Skeleton width={56} height={56} radius={20} />
+            <YStack flex={1} gap={9} justifyContent="center">
+              <Skeleton width="56%" height={15} />
+              <Skeleton width="78%" height={11} />
+            </YStack>
+          </Card>
         ) : me.isError ? (
           <ErrorNote message={(me.error as Error).message} onRetry={me.refetch} />
         ) : (
-          <Card padding={14} flexDirection="row" alignItems="center" gap={12} elevation={1}>
+          /**
+           * Kartu akun — padanan baris "Samsung account" di puncak Pengaturan One
+           * UI. Ia menggantikan baris "Profil saya" yang dulu ada di grup di
+           * bawah: satu tujuan tidak perlu dua pintu, dan kartu inilah yang lebih
+           * mudah dikenali sebagai "ini saya".
+           *
+           * Dua sasaran sentuh di dalam satu kartu: avatarnya mengganti foto,
+           * sisanya membuka Profil. Persis pembagian yang dipakai One UI.
+           */
+          <Card
+            flexDirection="row"
+            borderRadius={26}
+            padding={18}
+            alignItems="center"
+            gap={15}
+            pressStyle={{ backgroundColor: "$inset" }}
+            onPress={() => router.push("/profil")}
+            accessibilityRole="button"
+            aria-label={`Profil ${me.data.profile.name}`}
+          >
             <YStack
               pressStyle={{ opacity: 0.7 }}
               onPress={avatar.choose}
@@ -102,51 +180,42 @@ export default function Pengaturan() {
                 seed={me.data.profile.id}
                 initials={me.data.profile.initials}
                 photoKey={isFocused ? me.data.profile.photoKey : null}
-                size={46}
-                borderRadius={13}
+                size={56}
+                borderRadius={20}
                 opacity={avatar.busy ? 0.5 : 1}
               />
               {/* a badge, because a tappable avatar with nothing on it is a secret */}
               <YStack
                 position="absolute"
-                right={-3}
-                bottom={-3}
-                width={20}
-                height={20}
-                borderRadius={10}
+                right={-4}
+                bottom={-4}
+                width={23}
+                height={23}
+                borderRadius={12}
                 backgroundColor="$accentFill"
-                borderWidth={2}
+                borderWidth={2.5}
                 borderColor="$surface"
                 alignItems="center"
                 justifyContent="center"
               >
-                <Feather name="camera" size={9} color="#fff" />
+                <Feather name="camera" size={10} color="#fff" />
               </YStack>
             </YStack>
-            <YStack flex={1}>
-              <Text fontSize={14} fontWeight="600" color="$fg" numberOfLines={1}>
+
+            <YStack flex={1} gap={4}>
+              <Text fontSize={17} fontWeight="600" color="$fg" numberOfLines={1}>
                 {me.data.profile.name}
               </Text>
-              <Mono fontSize={11.5} color="$fgSubtle" numberOfLines={1}>
+              <Mono fontSize={12.5} color="$fgSubtle" numberOfLines={1}>
                 {me.data.profile.nik} · {me.data.profile.division}
               </Mono>
             </YStack>
             <Badge label="Aktif" fg="$success" bg="$successSubtle" />
+            <Feather name="chevron-right" size={18} color={tint("$fgSubtle")} />
           </Card>
         )}
 
-        {/* first group under the identity card: the only content destination on
-            this screen, and the one an employee actually comes looking for */}
-        <Group label="Berkas & data">
-          <Row
-            icon="user"
-            iconFg="$accent"
-            iconBg="$accentSubtle"
-            label="Profil saya"
-            note="Data pribadi, kepegawaian, dan kontak darurat"
-            chevron
-            onPress={() => router.push("/profil")}
-          />
+        <Group label="Berkas dan data">
           <Row
             icon="folder"
             iconFg="$info"
@@ -162,9 +231,9 @@ export default function Pengaturan() {
         <Tampilan />
         <Notifikasi shift={me.data?.shift} />
 
-        <Group label="Keamanan & privasi">
-          {/* gated by the caller, not by the row: a row that renders null inside
-              a Group would leave its divider behind */}
+        <Group label="Keamanan dan privasi">
+          {/* gated by the caller, not by the row: <Group> menghitung anaknya untuk
+              memutuskan apakah kartunya perlu digambar sama sekali */}
           {passkeyAvailable() ? <PasskeyRow ids={passkeys.data?.ids ?? []} /> : null}
           <Row
             icon="lock"
@@ -228,10 +297,53 @@ export default function Pengaturan() {
           />
         </Group>
 
-        <Btn tone="danger" onPress={() => setConfirmKeluar(true)} marginTop={2}>
-          Keluar dari akun
-        </Btn>
-      </ScrollView>
+        {/**
+         * Keluar sebagai baris merah di kartunya sendiri, bukan tombol merah pekat
+         * selebar layar. One UI menutup daftar setelan dengan sebuah baris — dan
+         * baris itu tetap terbaca sebagai tindakan merusak karena judul dan
+         * ikonnya merah, tanpa satu bidang merah yang menarik mata ke bawah
+         * mendahului segala sesuatu di atasnya.
+         */}
+        <Group>
+          <Row
+            icon="log-out"
+            iconFg="$danger"
+            iconBg="$dangerSubtle"
+            label="Keluar dari akun"
+            labelTone="$danger"
+            note="Anda perlu masuk lagi untuk mencatat absensi"
+            onPress={() => setConfirmKeluar(true)}
+          />
+        </Group>
+      </Animated.ScrollView>
+
+      {/**
+       * Bar ringkas yang menggantikan judul besar setelah digulirkan.
+       *
+       * Di luar ScrollView dan absolut di atasnya, jadi ia tetap diam sementara
+       * isinya lewat di bawahnya. `pointerEvents="none"` tanpa syarat: tidak ada
+       * apa pun di dalamnya yang bisa ditekan, dan bar tak terlihat yang memakan
+       * sentuhan di sepertiga atas layar adalah bug yang mahal ditemukan.
+       */}
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          paddingTop: insets.top,
+          backgroundColor: theme.bg?.val,
+          opacity: barMuncul,
+        }}
+      >
+        <YStack height={52} justifyContent="center" paddingHorizontal={20}>
+          <Text fontSize={17} fontWeight="600" color="$fg">
+            Pengaturan
+          </Text>
+        </YStack>
+        <YStack height={1} backgroundColor="$line" />
+      </Animated.View>
 
       <ConfirmSheet
         open={confirmKeluar}
@@ -311,32 +423,38 @@ function useAvatarUpload() {
 }
 
 /**
- * Terang / Gelap / Sistem (PRD-Mobile §6.7). The control is the whole section:
- * no card around it and no "Tema" row above it, because "Tampilan" plus three
- * labelled options already say what it does — a wrapper and a second label only
- * cost 50px of height and one more thing to read.
+ * Terang / Gelap / Sistem (PRD-Mobile §6.7). Tetap satu pilihan tiga arah dan
+ * bukan baris menuju sub-halaman: tiga opsi berlabel sudah menjelaskan dirinya,
+ * dan One UI pun menaruh pilihan mode gelapnya langsung di halaman, bukan di
+ * balik satu ketukan lagi.
  *
- * Icons *and* words, unlike the three bare glyphs this replaced in the old Info
- * header: the glyph is what makes it scannable, the word is what makes it
- * announceable. Buttons stay 36px tall — the compactness comes from dropping the
- * chrome, not from shrinking the touch target.
+ * Yang berubah hanyalah bungkusnya: dulu kontrol ini melayang di atas latar
+ * halaman, satu-satunya blok di layar ini yang tidak berada di dalam kartu.
+ * Sekarang ia duduk di kartu radius 26 yang sama dengan grup lainnya, dengan
+ * pilihannya sendiri beradius 9 — sudut yang lebih rapat di dalam sudut yang
+ * lebih lebar, yang membuat susunannya terbaca berlapis alih-alih sejajar.
  */
 function Tampilan() {
   const { theme, setTheme } = usePrefs();
 
   return (
-    <YStack gap={8}>
+    <YStack gap={9}>
       <GroupLabel>Tampilan</GroupLabel>
-      <Segmented
-        value={theme}
-        onChange={setTheme}
-        marginBottom={0}
-        options={[
-          { value: "system", label: "Sistem", icon: "smartphone" },
-          { value: "light", label: "Terang", icon: "sun" },
-          { value: "dark", label: "Gelap", icon: "moon" },
-        ]}
-      />
+      <Card borderRadius={26} padding={14} gap={11}>
+        <Text fontSize={15} fontWeight="500" color="$fg" paddingHorizontal={6}>
+          Tema aplikasi
+        </Text>
+        <Segmented
+          value={theme}
+          onChange={setTheme}
+          marginBottom={0}
+          options={[
+            { value: "system", label: "Sistem", icon: "smartphone" },
+            { value: "light", label: "Terang", icon: "sun" },
+            { value: "dark", label: "Gelap", icon: "moon" },
+          ]}
+        />
+      </Card>
     </YStack>
   );
 }
