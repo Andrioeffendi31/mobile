@@ -3,7 +3,7 @@ import { FlatList, Modal, RefreshControl, StyleSheet } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as Linking from "expo-linking";
-import { useIsFocused, useRouter } from "expo-router";
+import { useIsFocused } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
@@ -19,6 +19,7 @@ import {
   Screen,
   Skeleton,
   useAndroidBack,
+  useTabBack,
 } from "@/ui";
 
 type DocumentItem = Documents["items"][number];
@@ -34,7 +35,7 @@ const fileKind = (doc: DocumentItem) => {
 
 /** "Berkas saya" — personal and company documents inside Pengaturan. */
 export default function Berkas() {
-  const router = useRouter();
+  const back = useTabBack("/pengaturan");
   const theme = useTheme();
   const isFocused = useIsFocused();
   const qc = useQueryClient();
@@ -107,7 +108,7 @@ export default function Berkas() {
       <PageHeader
         title="Berkas saya"
         subtitle="Dokumen pribadi dan perusahaan"
-        onBack={() => (router.canGoBack() ? router.back() : router.replace("/pengaturan"))}
+        onBack={back}
       />
 
       <FlatList

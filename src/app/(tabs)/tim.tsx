@@ -16,8 +16,10 @@ import {
   Input,
   Mono,
   PageIntro,
+  StickyHeader,
   Screen,
   Skeleton,
+  useStickyHeader,
 } from "@/ui";
 
 const FILTERS = [
@@ -109,9 +111,14 @@ export default function Tim() {
   );
   const progress = members.length ? Math.round((summary.present / members.length) * 100) : 0;
 
+  // strip buram di bawah status bar + judul kecil, muncul saat digulirkan
+  const bar = useStickyHeader();
+
   return (
     <Screen>
       <FlatList
+        onScroll={bar.onScroll}
+        scrollEventThrottle={bar.scrollEventThrottle}
         data={q.isPending || q.isError ? [] : visible}
         keyExtractor={(member) => String(member.id)}
         refreshControl={
@@ -302,6 +309,7 @@ export default function Tim() {
           </XStack>
         )}
       />
+      <StickyHeader shown={bar.shown} title="Kehadiran tim" />
     </Screen>
   );
 }

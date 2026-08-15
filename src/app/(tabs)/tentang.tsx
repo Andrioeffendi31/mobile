@@ -1,11 +1,11 @@
 import { Image } from "react-native";
 import Constants from "expo-constants";
 import * as Updates from "expo-updates";
-import { useIsFocused, useRouter } from "expo-router";
+import { useIsFocused } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { ScrollView, Text, YStack } from "tamagui";
 import { type Bootstrap, get } from "@/api";
-import { Card, Group, Note, PageHeader, Row, Screen } from "@/ui";
+import { Card, Group, Note, PageHeader, Row, Screen, useTabBack } from "@/ui";
 
 /**
  * "Tentang aplikasi" — what this build is, and which office and shift it reports
@@ -17,7 +17,7 @@ import { Card, Group, Note, PageHeader, Row, Screen } from "@/ui";
  * `runtimeVersion` follows the app version by policy.
  */
 export default function Tentang() {
-  const router = useRouter();
+  const back = useTabBack("/pengaturan");
   const isFocused = useIsFocused();
   const me = useQuery({
     queryKey: ["me"],
@@ -34,7 +34,7 @@ export default function Tentang() {
       <PageHeader
         title="Tentang"
         subtitle="Versi aplikasi dan perusahaan"
-        onBack={() => (router.canGoBack() ? router.back() : router.replace("/pengaturan"))}
+        onBack={back}
       />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: 28, gap: 19 }}>
         <Card padding={16} alignItems="center" gap={3}>

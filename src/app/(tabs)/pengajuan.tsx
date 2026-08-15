@@ -13,10 +13,12 @@ import {
   ErrorNote,
   Mono,
   PageIntro,
+  StickyHeader,
   ReqBadge,
   Screen,
   Segmented,
   Skeleton,
+  useStickyHeader,
 } from "@/ui";
 
 type Tab = "cuti" | "lembur";
@@ -72,9 +74,14 @@ export default function Pengajuan() {
     setSheet(tab);
   };
 
+  // strip buram di bawah status bar + judul kecil, muncul saat digulirkan
+  const bar = useStickyHeader();
+
   return (
     <Screen>
       <FlatList
+        onScroll={bar.onScroll}
+        scrollEventThrottle={bar.scrollEventThrottle}
         data={q.isPending || q.isError ? [] : items}
         keyExtractor={(item) => `${item.kind}-${item.id}`}
         refreshControl={
@@ -173,6 +180,7 @@ export default function Pengajuan() {
           setViewing(null);
         }}
       />
+      <StickyHeader shown={bar.shown} title="Pengajuan saya" />
     </Screen>
   );
 }

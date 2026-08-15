@@ -3,7 +3,7 @@ import { Feather } from "@expo/vector-icons";
 import type { ImageResult } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
-import { useFocusEffect, useIsFocused, useRouter } from "expo-router";
+import { useFocusEffect, useIsFocused } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image, ScrollView, Text, XStack, YStack } from "tamagui";
@@ -27,6 +27,7 @@ import {
   Skeleton,
   SkeletonRows,
   Toggle,
+  useTabBack,
 } from "@/ui";
 
 /**
@@ -63,7 +64,6 @@ const SELFIE_WIDTH = 720;
 
 export default function Absen() {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
   const isFocused = useIsFocused();
   const qc = useQueryClient();
   const me = useQuery({
@@ -210,6 +210,9 @@ export default function Absen() {
   const noGeofence = action === "out" && data?.today.officeId === null;
   const inside = noGeofence || (meter !== null && meter <= chosen!.radiusM);
 
+  // kembali ke Beranda, bukan router.back() — lihat useTabBack di ui.tsx
+  const close = useTabBack("/");
+
   const submit = useMutation({
     mutationFn: async () => {
       if (!fix) throw new Error("Lokasi belum siap");
@@ -254,8 +257,7 @@ export default function Absen() {
           ? `Absen masuk tercatat ${res.at} · ${res.location}`
           : `Absen keluar tercatat ${res.at}`,
       );
-      if (router.canGoBack()) router.back();
-      else router.replace("/");
+      close();
     },
   });
 
@@ -299,7 +301,6 @@ export default function Absen() {
     }, [readLocation, takeSelfie, resetSubmit]),
   );
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
   /** the selfie counts here now: the server rejects a punch without one, so the
    *  button must not offer to send what cannot be accepted */
   const blocked = !fix || !selfie || (!inside && !wfh) || submit.isPending || preparing;

@@ -14,9 +14,11 @@ import {
   ErrorNote,
   Mono,
   PageIntro,
+  StickyHeader,
   Screen,
   Skeleton,
   useAndroidBack,
+  useStickyHeader,
 } from "@/ui";
 
 const currentMonth = () => todayWib().slice(0, 7);
@@ -69,9 +71,14 @@ export default function Kehadiran() {
   const stats = q.data?.stats;
   const recorded = (stats?.hadir ?? 0) + (stats?.telat ?? 0);
 
+  // strip buram di bawah status bar + judul kecil, muncul saat digulirkan
+  const bar = useStickyHeader();
+
   return (
     <Screen>
       <FlatList
+        onScroll={bar.onScroll}
+        scrollEventThrottle={bar.scrollEventThrottle}
         data={q.isPending || q.isError ? [] : days}
         keyExtractor={(item) => item.date}
         refreshControl={
@@ -156,26 +163,15 @@ export default function Kehadiran() {
 
               <YStack flex={1} gap={7}>
                 <XStack flex={1} gap={7}>
-                  <Stat label="Hadir" value={stats?.hadir ?? 0} color="$success" weight={1.08} />
-                  <Stat
-                    label="Terlambat"
-                    value={stats?.telat ?? 0}
-                    color="$warning"
-                    weight={0.92}
-                  />
+                  <Stat label="Hadir" value={stats?.hadir ?? 0} color="$success" />
+                  <Stat label="Terlambat" value={stats?.telat ?? 0} color="$warning" />
                 </XStack>
                 <XStack flex={1} gap={7}>
-                  <Stat
-                    label="Cuti / izin"
-                    value={stats?.cuti ?? 0}
-                    color="$info"
-                    weight={0.92}
-                  />
+                  <Stat label="Cuti / izin" value={stats?.cuti ?? 0} color="$info" />
                   <Stat
                     label="Tanpa ket."
                     value={stats?.tanpaKeterangan ?? 0}
                     color="$danger"
-                    weight={1.08}
                   />
                 </XStack>
               </YStack>
@@ -312,38 +308,56 @@ export default function Kehadiran() {
         }}
       />
       <AttendanceDetailSheet date={day} open={day !== null} onClose={() => setDay(null)} />
+      <StickyHeader shown={bar.shown} title="Kehadiran saya" />
     </Screen>
   );
 }
 
+/**
+ * Satu angka ringkasan bulan ini.
+ *
+ * `flex={1}` rata untuk keempatnya. Dulu tiap kartu membawa `weight` sendiri
+ * (1,08 dan 0,92) supaya "Terlambat" dan "Tanpa ket." dapat ruang lebih — tapi
+ * yang dihasilkan adalah kisi 2×2 dengan empat lebar berbeda, dan kolom yang
+ * tidak lurus lebih mengganggu daripada label yang mepet. Dengan lebar yang sama
+ * pun labelnya masih muat: yang terpanjang ("Terlambat") ~55px pada 10,5px,
+ * sedangkan ruang teksnya ~87px di layar 411dp.
+ *
+ * `numberOfLines={1}` menjaganya tetap begitu: label yang membungkus akan
+ * menaikkan tinggi satu kartu saja dan membengkokkan barisnya.
+ */
 function Stat({
   label,
   value,
   color,
-  weight = 1,
 }: {
   label: string;
   value: number;
   color: string;
-  weight?: number;
 }) {
   return (
     <YStack
-      flex={weight}
+      flex={1}
       minWidth={0}
-      minHeight={60}
+      minHeight={64}
       justifyContent="space-between"
       backgroundColor="$surface"
       borderRadius={18}
       borderWidth={1}
       borderColor="$line"
-      paddingHorizontal={9}
-      paddingVertical={8}
+      paddingHorizontal={12}
+      paddingVertical={10}
     >
-      <Mono fontSize={17} lineHeight={20} fontWeight="700" color={color}>
+      <Mono fontSize={20} lineHeight={24} fontWeight="700" color={color}>
         {value}
       </Mono>
-      <Text fontSize={8.8} lineHeight={11.5} fontWeight="500" color="$fgMuted">
+      <Text
+        fontSize={10.5}
+        lineHeight={14}
+        fontWeight="500"
+        color="$fgMuted"
+        numberOfLines={1}
+      >
         {label}
       </Text>
     </YStack>

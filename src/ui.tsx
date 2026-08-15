@@ -2,11 +2,19 @@ import {
   Children,
   type ComponentProps,
   type ReactNode,
+  useCallback,
   useEffect,
   useRef,
   useState,
 } from "react";
-import { Animated, BackHandler, Keyboard, Platform } from "react-native";
+import {
+  Animated,
+  BackHandler,
+  Keyboard,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  Platform,
+} from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "@tamagui/linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -27,6 +35,7 @@ import {
   styled,
   useTheme,
 } from "tamagui";
+import { type Href, useIsFocused, useRouter } from "expo-router";
 import { API, useSession } from "@/api";
 import { jamWib } from "@/format";
 import { att, avatarColor, req, tint } from "@/theme";
@@ -91,6 +100,80 @@ export function PageIntro({ title, subtitle }: { title: string; subtitle: string
       </Text>
     </YStack>
   );
+}
+
+/**
+ * Bar ringkas One UI: strip buram setinggi safe-area yang muncul begitu judul
+ * besar tergulir lewat, dengan judul yang sama dalam ukuran kecil.
+ *
+ * Dua tugas sekaligus, dan yang kedua yang membuatnya wajib di setiap tab root:
+ * isi layar menggulir SAMPAI ke bawah jam dan ikon baterai, jadi tanpa strip ini
+ * kartu-kartu lewat di belakang status bar dan angka jamnya berdiri di atas teks.
+ * Karena itu Beranda pun memakainya, hanya tanpa judul — di sana yang dibutuhkan
+ * memang cuma stripnya.
+ *
+ * Selalu `pointerEvents="none"`: tidak ada apa pun di dalamnya yang bisa ditekan,
+ * dan bar tak terlihat yang memakan sentuhan di puncak layar adalah bug yang
+ * mahal ditemukan.
+ */
+export function StickyHeader({ shown, title }: { shown: boolean; title?: string }) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <YStack
+      position="absolute"
+      top={0}
+      left={0}
+      right={0}
+      pointerEvents="none"
+      backgroundColor="$bg"
+      paddingTop={insets.top}
+      opacity={shown ? 1 : 0}
+      transition="quick"
+    >
+      {title ? (
+        <YStack height={52} justifyContent="center" paddingHorizontal={20}>
+          <Text fontSize={17} fontWeight="600" color="$fg" numberOfLines={1}>
+            {title}
+          </Text>
+        </YStack>
+      ) : null}
+      <YStack height={1} backgroundColor="$line" />
+    </YStack>
+  );
+}
+
+/**
+ * Pasangan <StickyHeader>: sebuah boolean dan handler onScroll untuk dipasang ke
+ * FlatList / ScrollView layarnya.
+ *
+ * Sengaja BUKAN Animated.Value yang diinterpolasi. Yang perlu diketahui bar itu
+ * satu bit — sudah lewat atau belum — dan React membatalkan render ketika
+ * setState menerima nilai yang sama, jadi handler ini berjalan tiap 32 ms tapi
+ * hanya menghasilkan dua render sepanjang satu gulir penuh. Interpolasi terikat
+ * gulir menuntut Animated.FlatList, yang menghapus tipe generik itemnya, demi
+ * pudar yang bagaimanapun berlangsung di bawah 100 ms.
+ *
+ * `ambang - 12` saat sedang tampil adalah histeresis: tanpa jeda itu, gulir yang
+ * berhenti tepat di ambangnya membuat barnya berkedip-kedip.
+ *
+ * Bawaan 56 kira-kira tinggi judul besar: barnya menyusul persis ketika judul itu
+ * habis. Layar tanpa judul (Beranda) melewatkan angka jauh lebih kecil — di sana
+ * yang harus tertutup adalah kartu pertama, dan itu sudah bergerak pada piksel
+ * pertama gulir.
+ */
+export function useStickyHeader(ambang = 56) {
+  const [shown, setShown] = useState(false);
+
+  const onScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const y = e.nativeEvent.contentOffset.y;
+      setShown((on) => y > (on ? ambang - 12 : ambang));
+    },
+    [ambang],
+  );
+
+  return { shown, onScroll, scrollEventThrottle: 32 };
 }
 
 export const SectionLabel = styled(Text, {
@@ -1023,6 +1106,34 @@ export function useAndroidBack(active: boolean, onBack: () => void) {
     });
     return () => sub.remove();
   }, [active, onBack]);
+}
+
+/**
+ * Tombol kembali untuk layar yang tinggal DI DALAM navigator tab — berkas,
+ * profil, tentang, absen: semuanya `<Tabs.Screen href={null}>`, bukan layar di
+ * atas sebuah tumpukan.
+ *
+ * Bukan `router.back()`, dan itu inti perbaikannya. Di dalam navigator tab
+ * "kembali" bukan pop sebuah tumpukan: tujuannya ditentukan `backBehavior`, dan
+ * ketika riwayat tab-nya habis GO_BACK naik ke <Stack> di root — yang hanya
+ * berisi `(tabs)`. Mengeluarkannya dari sana menyisakan Stack tanpa satu layar
+ * pun: warna jendela Android polos, tanpa jalan kembali selain menutup
+ * aplikasi. Itu layar putih kosong sesudah menekan kembali dari Profil.
+ *
+ * `router.navigate(tab)` tidak bergantung pada riwayat sama sekali — ia selalu
+ * mendarat di tab pemiliknya, termasuk ketika layar ini dibuka langsung lewat
+ * deep link, kasus yang dulu ditebak dengan `canGoBack()`.
+ *
+ * Tombol kembali perangkat keras diikat ke fungsi yang sama, dan hanya selama
+ * layarnya fokus: BackHandler itu global, jadi pendaftaran tanpa syarat akan
+ * membajak tombol kembali di keempat tab lainnya.
+ */
+export function useTabBack(tab: Href) {
+  const router = useRouter();
+  const focused = useIsFocused();
+  const kembali = useCallback(() => router.navigate(tab), [router, tab]);
+  useAndroidBack(focused, kembali);
+  return kembali;
 }
 
 /**

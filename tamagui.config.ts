@@ -11,7 +11,21 @@ import { createTamagui } from "tamagui";
 export const light = {
   bg: "#f5f6f8",
   surface: "#ffffff",
-  surface2: "#fbfcfd",
+  /**
+   * Satu tingkat DI DALAM sebuah kartu — panel di dalam kartu Beranda, blok di
+   * dalam sheet Detail Kehadiran. Tidak pernah dipakai langsung di atas $bg.
+   *
+   * Dulu #fbfcfd: 1% dari putih, yang di layar berarti tidak ada bedanya sama
+   * sekali. Tema gelap punya tangga tonal sungguhan (#18191d → #202126 → #27282e)
+   * dan tema terang tidak, jadi sheet yang sama terbaca berlapis di gelap dan
+   * rata di terang — persis yang terlihat kalau kedua tangkapan layar Detail
+   * Kehadiran disandingkan.
+   *
+   * #f4f6f9 memulihkan tangganya: putih untuk kartu, ini untuk panel di dalamnya,
+   * $inset (#eef0f3) untuk chip di dalam panel itu. Nilainya nyaris sama dengan
+   * $bg, dan itu tidak apa-apa justru karena ia tidak pernah berdiri di sana.
+   */
+  surface2: "#f4f6f9",
   inset: "#eef0f3",
   line: "#e6e8ec",
   lineStrong: "#d4d8df",

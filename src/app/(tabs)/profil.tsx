@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useIsFocused, useRouter } from "expo-router";
+import { useIsFocused } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ScrollView, Text, XStack, YStack } from "tamagui";
 import { type Bootstrap, get, postJson } from "@/api";
@@ -19,6 +19,7 @@ import {
   Screen,
   SheetShell,
   SkeletonRows,
+  useTabBack,
 } from "@/ui";
 
 /**
@@ -34,7 +35,6 @@ import {
  * ones that go stale and which HR has no way of noticing.
  */
 export default function Profil() {
-  const router = useRouter();
   const isFocused = useIsFocused();
   const qc = useQueryClient();
   const me = useQuery({
@@ -45,8 +45,7 @@ export default function Profil() {
   const [editing, setEditing] = useState(false);
 
   const p = me.data?.profile;
-  const back = () =>
-    router.canGoBack() ? router.back() : router.replace("/pengaturan");
+  const back = useTabBack("/pengaturan");
 
   return (
     <Screen>
