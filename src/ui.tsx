@@ -418,6 +418,15 @@ export function Segmented<V extends string>({
   options: { value: V; label: string; icon?: ComponentProps<typeof Feather>["name"] }[];
   onChange: (v: V) => void;
 } & Omit<ComponentProps<typeof XStack>, "onChange">) {
+  /**
+   * Nilai tema yang hidup, bukan tint() — alasan yang sama seperti chevron di
+   * PageHeader. tint() sengaja selalu menjawab dari palet TERANG supaya ikon di
+   * dalam ubin berwarna mempertahankan hue-nya di kedua skema; untuk glyph telanjang
+   * di atas permukaan bertema, jawaban itu berarti $fg = #14161b, yaitu hitam di
+   * atas pil gelap. Persis ikon bulan "Gelap" yang lenyap di tema gelap.
+   */
+  const theme = useTheme();
+
   return (
     <XStack
       gap={4}
@@ -445,7 +454,11 @@ export function Segmented<V extends string>({
             onPress={() => onChange(o.value)}
             icon={
               o.icon ? (
-                <Feather name={o.icon} size={13} color={tint(on ? "$fg" : "$fgSubtle")} />
+                <Feather
+                  name={o.icon}
+                  size={13}
+                  color={(on ? theme.fg?.val : theme.fgSubtle?.val) ?? undefined}
+                />
               ) : undefined
             }
           >

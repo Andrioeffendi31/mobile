@@ -412,6 +412,15 @@ export type Announcements = {
 };
 
 export type Documents = {
+  /** Jatah ruang karyawan ini. Kalimatnya sudah diformat server — sama seperti
+   *  `size` di bawah — dan bytenya ikut dikirim karena bar kuota butuh rasionya. */
+  storage: {
+    usedBytes: number;
+    quotaBytes: number;
+    terpakai: string;
+    kuota: string;
+    sisa: string;
+  };
   items: {
     id: number;
     name: string;
@@ -419,6 +428,8 @@ export type Documents = {
     folder: string;
     key: string;
     size: string;
+    /** true kalau berkas ini miliknya sendiri — hanya yang ini boleh dihapus */
     mine: boolean;
+    uploadedAt: string;
   }[];
 };

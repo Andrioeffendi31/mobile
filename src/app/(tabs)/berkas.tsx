@@ -8,10 +8,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import { Image, Spinner, Text, XStack, YStack, useTheme } from "tamagui";
-import { API, type Documents, get, postForm } from "@/api";
+import { API, type Documents, get, postForm, postJson } from "@/api";
+import { canProcessImages, shrinkImage } from "@/image";
 import { toast } from "@/toast";
 import {
   Btn,
+  ConfirmSheet,
   Empty,
   ErrorNote,
   Mono,
@@ -26,6 +28,23 @@ type DocumentItem = Documents["items"][number];
 type Preview = { doc: DocumentItem; url: string; kind: "image" | "pdf" };
 
 const IMAGE_EXTENSIONS = new Set(["JPG", "JPEG", "PNG", "WEBP", "GIF"]);
+/** HEIC ikut dikenali di sini meski BUKAN gambar yang bisa ditampilkan layar ini:
+ *  server pun menolaknya (`heic` tidak ada di DOC_EXT). Justru itu gunanya — foto
+ *  iPhone lolos karena sudah menjadi WebP sebelum sampai ke sana. */
+const COMPRESSIBLE = new Set([...IMAGE_EXTENSIONS, "HEIC", "HEIF"]);
+
+/** ekstensi tanpa titik, huruf besar; "" kalau tidak ada. Satu baris di sini,
+ *  bukan impor: mobile sengaja tidak mengambil apa pun dari web/ (PRD-Mobile §10). */
+const extOf = (name: string) =>
+  name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toUpperCase() : "";
+const gantiEkstensi = (name: string, ext: string) =>
+  `${name.includes(".") ? name.slice(0, name.lastIndexOf(".")) : name}.${ext}`;
+
+/**
+ * Di bawah ini mengubah sandi ulang hanya membuang waktu — sebuah tanda tangan
+ * pindaian 40 KB tidak akan menyusut lagi, dan pengguna menunggu percuma.
+ */
+const AMBANG_KOMPRESI = 600 * 1024;
 const fileKind = (doc: DocumentItem) => {
   const ext = doc.ext.toUpperCase();
   if (IMAGE_EXTENSIONS.has(ext)) return "image" as const;
@@ -78,17 +97,55 @@ export default function Berkas() {
     onSettled: () => setBusyId(null),
   });
 
+  /**
+   * Unggah, dengan gambar dikecilkan lebih dulu.
+   *
+   * Kompresinya terjadi di ponsel dan bukan di server karena yang mahal bukan CPU-nya
+   * melainkan perjalanannya: bucket R2 hanya 10 GB, dan sebuah foto 12 MP yang
+   * diunggah utuh memakan jatah yang sama dengan puluhan dokumen.
+   *
+   * Tiga penjaga sebelum mengecilkan, masing-masing menjawab kegagalan yang berbeda:
+   * `canProcessImages()` untuk build lama yang belum memuat expo-image-manipulator,
+   * `AMBANG_KOMPRESI` untuk berkas yang memang sudah kecil, dan `try/catch` untuk
+   * berkas rusak atau format asing — unggahan yang gagal dikompres harus tetap
+   * terunggah, bukan gagal sama sekali.
+   */
   const upload = useMutation({
     mutationFn: async () => {
       const picked = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
       if (picked.canceled) return null;
       const file = picked.assets[0];
-      const form = new FormData();
-      form.append("file", {
+
+      let bagian = {
         uri: file.uri,
         name: file.name,
         type: file.mimeType ?? "application/octet-stream",
-      } as unknown as Blob);
+      };
+      if (
+        COMPRESSIBLE.has(extOf(file.name)) &&
+        canProcessImages() &&
+        (file.size ?? 0) > AMBANG_KOMPRESI
+      ) {
+        try {
+          const kecil = await shrinkImage(file.uri);
+          /**
+           * Namanya ikut berganti ekstensi, dan itu wajib: `documents.name` yang
+           * dipakai server sebagai nama unduhan, jadi menyimpan nama .jpg untuk byte
+           * WebP berarti menyerahkan berkas yang tidak bisa dibuka galeri orangnya.
+           * Nama, kolom `ext`, dan object key harus sepakat.
+           */
+          bagian = {
+            uri: kecil.uri,
+            name: gantiEkstensi(file.name, "webp"),
+            type: "image/webp",
+          };
+        } catch (error) {
+          console.warn("[berkas] gagal mengecilkan", (error as Error).message);
+        }
+      }
+
+      const form = new FormData();
+      form.append("file", bagian as unknown as Blob);
       return postForm<{ id: number }>("/api/me/documents", form);
     },
     onSuccess: async (result) => {
@@ -99,9 +156,27 @@ export default function Berkas() {
     onError: (error) => toast((error as Error).message),
   });
 
+  /**
+   * Hapus berkas sendiri. Hanya baris `mine` yang punya tombolnya, dan server
+   * memeriksa ulang kepemilikannya — tombol yang hilang itu tampilan dari aturan,
+   * bukan aturannya sendiri.
+   */
+  const [hapus, setHapus] = useState<DocumentItem | null>(null);
+  const remove = useMutation({
+    mutationFn: (doc: DocumentItem) =>
+      postJson<{ ok: true }>("/api/me/documents", { id: doc.id }, "DELETE"),
+    onSuccess: async () => {
+      // ["documents"] membawa daftar DAN sisa kuotanya, jadi satu invalidasi cukup
+      await qc.invalidateQueries({ queryKey: ["documents"] });
+      toast("Berkas dihapus");
+    },
+    onError: (error) => toast((error as Error).message),
+  });
+
   const items = q.data?.items ?? [];
   const personal = items.filter((item) => item.mine).length;
   const company = items.length - personal;
+  const storage = q.data?.storage;
 
   return (
     <Screen>
@@ -163,9 +238,32 @@ export default function Berkas() {
                       berkas
                     </Text>
                   </XStack>
+                  {/* "Tersimpan aman" tidak memberi tahu apa pun yang tidak sudah
+                      diasumsikan orang. Sisa kuota memberi tahu, dan ruangnya sudah
+                      ada di kartu ini — tidak ada kartu baru dan tidak ada perubahan
+                      tata letak. */}
                   <Text fontSize={9.5} color="$accentFg" opacity={0.7}>
-                    Tersimpan aman
+                    {storage ? `Sisa ${storage.sisa}` : "Tersimpan aman"}
                   </Text>
+                  {storage ? (
+                    <YStack
+                      height={4}
+                      marginTop={4}
+                      borderRadius={2}
+                      backgroundColor="rgba(255,255,255,.22)"
+                      overflow="hidden"
+                    >
+                      <YStack
+                        height={4}
+                        borderRadius={2}
+                        backgroundColor="#fff"
+                        opacity={0.85}
+                        // dipatok di 100%: kuota bisa terlampaui sedikit oleh dua
+                        // unggahan bersamaan, dan bar yang meluber terlihat rusak
+                        width={`${Math.min(100, Math.round((storage.usedBytes / storage.quotaBytes) * 100))}%`}
+                      />
+                    </YStack>
+                  ) : null}
                 </YStack>
               </YStack>
 
@@ -266,20 +364,45 @@ export default function Berkas() {
               {busy ? (
                 <Spinner size="small" color="$fgSubtle" />
               ) : (
-                <YStack
-                  width={34}
-                  height={34}
-                  borderRadius={14}
-                  alignItems="center"
-                  justifyContent="center"
-                  backgroundColor="$inset"
-                >
-                  <Feather
-                    name={!openable ? "slash" : kind === "external" ? "external-link" : "eye"}
-                    size={15}
-                    color={theme.fgMuted?.val}
-                  />
-                </YStack>
+                <XStack alignItems="center" gap={7}>
+                  <YStack
+                    width={34}
+                    height={34}
+                    borderRadius={14}
+                    alignItems="center"
+                    justifyContent="center"
+                    backgroundColor="$inset"
+                  >
+                    <Feather
+                      name={!openable ? "slash" : kind === "external" ? "external-link" : "eye"}
+                      size={15}
+                      color={theme.fgMuted?.val}
+                    />
+                  </YStack>
+                  {/* hanya berkas sendiri. Dokumen perusahaan tidak punya tombol ini,
+                      dan server menolaknya juga kalau ada yang mencoba lewat API. */}
+                  {item.mine ? (
+                    <YStack
+                      width={34}
+                      height={34}
+                      borderRadius={14}
+                      alignItems="center"
+                      justifyContent="center"
+                      backgroundColor="$dangerSubtle"
+                      pressStyle={{ opacity: 0.6 }}
+                      onPress={(e) => {
+                        // baris di belakangnya membuka pratinjau; tanpa ini satu
+                        // ketukan pada tempat sampah melakukan keduanya
+                        e.stopPropagation();
+                        setHapus(item);
+                      }}
+                      accessibilityRole="button"
+                      aria-label={`Hapus ${item.name}`}
+                    >
+                      <Feather name="trash-2" size={15} color={theme.danger?.val} />
+                    </YStack>
+                  ) : null}
+                </XStack>
               )}
             </XStack>
           );
@@ -306,6 +429,31 @@ export default function Berkas() {
       </YStack>
 
       <FilePreview preview={preview} onClose={() => setPreview(null)} />
+
+      {/* Menghapus berkas di R2 tidak bisa dibatalkan, jadi ia lewat konfirmasi —
+          dan namanya disebutkan, karena "Hapus berkas ini?" tidak menolong siapa pun
+          yang salah menekan pada daftar berisi sepuluh baris mirip. */}
+      <ConfirmSheet
+        open={hapus !== null}
+        onClose={() => setHapus(null)}
+        title="Hapus berkas?"
+        message={
+          hapus
+            ? `${hapus.name} akan dihapus permanen dan ruangnya kembali ke kuota Anda.`
+            : undefined
+        }
+        actions={[
+          {
+            label: "Hapus",
+            tone: "danger",
+            onPress: () => {
+              const doc = hapus;
+              setHapus(null);
+              if (doc) remove.mutate(doc);
+            },
+          },
+        ]}
+      />
     </Screen>
   );
 }

@@ -6,7 +6,7 @@ import * as Location from "expo-location";
 import { useFocusEffect, useIsFocused } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Image, ScrollView, Text, XStack, YStack } from "tamagui";
+import { Image, ScrollView, Text, XStack, YStack, useTheme } from "tamagui";
 import { type Bootstrap, type Office, get, postForm } from "@/api";
 import { stopBackgroundPing } from "@/background-ping";
 import { formatJarak, tanggalPanjang, jarakMeter } from "@/format";
@@ -64,6 +64,7 @@ const SELFIE_WIDTH = 720;
 
 export default function Absen() {
   const insets = useSafeAreaInsets();
+  const theme = useTheme();
   const isFocused = useIsFocused();
   const qc = useQueryClient();
   const me = useQuery({
@@ -352,7 +353,9 @@ export default function Absen() {
             accessibilityRole="button"
             aria-label="Kembali"
           >
-            <Feather name="chevron-left" size={25} color={tint("$fg")} />
+            {/* nilai tema, bukan tint(): glyph telanjang di atas permukaan
+                bertema — lihat Segmented dan PageHeader di ui.tsx */}
+            <Feather name="chevron-left" size={25} color={theme.fg?.val} />
           </XStack>
           <Text fontSize={19} fontWeight="700" color="$fg">
             {action === "in" ? "Absen Masuk" : "Absen Keluar"}
