@@ -38,7 +38,11 @@ const group = (status: string): Filter =>
     ? "hadir"
     : status === "telat"
       ? "telat"
-      : status === "belum_absen" || status === "tanpa_keterangan"
+      : status === "libur" || status === "belum_dicatat"
+        ? // hari yang tidak dinilai bukan urusan tindak lanjut; ember "izin" adalah
+          // tempat terdekat yang ada di rail filter layar ini
+          "izin"
+        : status === "belum_absen" || status === "tanpa_keterangan"
         ? "belum"
         : // "libur" ikut ember izin, bukan "belum": hari libur divisinya bukan
           // sesuatu yang perlu ditindaklanjuti siapa pun

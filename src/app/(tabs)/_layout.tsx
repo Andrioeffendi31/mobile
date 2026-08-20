@@ -33,7 +33,12 @@ export default function TabLayout() {
     enabled: false,
   });
   const pendingRequests = [...(requests.data?.cuti ?? []), ...(requests.data?.lembur ?? [])].filter(
-    (item) => item.status === "menunggu" || item.status === "revisi",
+    // menunggu_pimpinan ikut terhitung: bagi karyawan ia masih pengajuan yang
+    // sedang jalan, hanya sudah lolos satu tanda tangan
+    (item) =>
+      item.status === "menunggu" ||
+      item.status === "menunggu_pimpinan" ||
+      item.status === "revisi",
   ).length;
   const bootstrapReady = Boolean(data);
 

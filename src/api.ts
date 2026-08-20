@@ -320,6 +320,12 @@ export type AttendanceDay = {
   ditolak: { type: string; startDate: string; endDate: string; note: string | null } | null;
   /** the same office as a point, for the map; null on a WFH day */
   officeGeo: { lat: number; lng: number; radiusM: number } | null;
+  /** alasan yang ditulis sendiri di titik absen, wajib saat di luar jamnya */
+  lateReason: string | null;
+  earlyReason: string | null;
+  /** keputusan admin atas alasan di atas; null = belum ditinjau. `ok: true`
+   *  berarti `status` di atas sudah terbaca hadir. */
+  review: { ok: boolean; note: string | null; at: string | null } | null;
   events: {
     id: number;
     kind: "masuk" | "keluar" | "catatan" | "lokasi";
@@ -359,7 +365,14 @@ export type RequestItem = {
   detail: string;
   note: string;
   /** `revisi` = sent back by HR, editable by the employee until resubmitted */
-  status: "menunggu" | "revisi" | "disetujui" | "ditolak" | "dibatalkan";
+  status:
+    | "menunggu"
+    /** lolos admin, menunggu Pimpinan — hanya cuti yang pernah ke sini */
+    | "menunggu_pimpinan"
+    | "revisi"
+    | "disetujui"
+    | "ditolak"
+    | "dibatalkan";
   /** cuti only */
   days?: number;
   /** the raw fields, so a revision reopens in the form that created it */

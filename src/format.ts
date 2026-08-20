@@ -124,6 +124,35 @@ export function hariKerjaPreview(start: string, end: string) {
   return n;
 }
 
+/**
+ * Terlambat / pulang cepat — cermin `attendanceStatus` dan `pulangCepat` di
+ * web/src/lib/hr.ts.
+ *
+ * Ada di sini untuk alasan yang sama seperti `jarakMeter` di atas: supaya field
+ * "alasan" muncul dan tombolnya mati SEBELUM permintaan yang pasti ditolak
+ * dikirim. Yang menentukan tetap /api/me/clock, yang tidak bisa dibujuk telepon
+ * ini — kalau keduanya berbeda pendapat, servernya yang menang dan pesannya
+ * yang tampil.
+ */
+export function terlambat(sekarang: string, shiftStart: string, toleransi: number) {
+  const m = (t: string) => {
+    const [h, min] = t.split(":").map(Number);
+    return (h || 0) * 60 + (min || 0);
+  };
+  return m(sekarang) > m(shiftStart) + toleransi;
+}
+
+/** Keluar sebelum shiftnya selesai. Sisanya harus lebih dari nol dan tidak lebih
+ *  panjang dari shiftnya — batas kedua yang membedakan "sejam lebih awal" dari
+ *  "sejam lembur", yang tanpa itu terbaca 23 jam lebih awal. */
+export function pulangCepat(
+  sekarang: string,
+  shift: { start: string; end: string },
+) {
+  const sisa = menitAntara(sekarang, shift.end);
+  return sisa > 0 && sisa <= menitAntara(shift.start, shift.end);
+}
+
 export function menitAntara(startTime: string, endTime: string) {
   const m = (t: string) => {
     const [h, min] = t.split(":").map(Number);
@@ -164,6 +193,20 @@ if (__DEV__) {
   eq(menitKerja("08:05:30", "08:35:00"), 30, "detik diabaikan");
   eq(menitAntara("08:00", "17:00"), 540, "panjang shift siang");
   eq(menitAntara("22:00", "06:00"), 480, "panjang shift malam");
+  const yakin = (got: boolean, want: boolean, apa: string) => {
+    if (got !== want) throw new Error(`${apa}: ${got} ≠ ${want}`);
+  };
+  // cermin hr.check.ts: 08:00 + toleransi 15
+  yakin(terlambat("08:15", "08:00", 15), false, "tepat di batas toleransi");
+  yakin(terlambat("08:16", "08:00", 15), true, "lewat toleransi");
+  yakin(terlambat("07:52", "08:00", 15), false, "datang lebih awal");
+  const siang = { start: "08:00", end: "17:00" };
+  const malam = { start: "22:00", end: "06:00" };
+  yakin(pulangCepat("17:00", siang), false, "tepat akhir shift");
+  yakin(pulangCepat("16:00", siang), true, "sejam lebih awal");
+  yakin(pulangCepat("18:30", siang), false, "lembur, bukan pulang cepat");
+  yakin(pulangCepat("05:00", malam), true, "shift malam lebih awal");
+  yakin(pulangCepat("07:00", malam), false, "shift malam lembur");
 }
 
 /** "0858-8182-0410". Same grouping as the web's lib/hr.ts — duplicated rather

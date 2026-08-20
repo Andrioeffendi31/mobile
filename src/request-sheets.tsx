@@ -43,10 +43,28 @@ export function LeaveSheet({
   /** the request this sheet is showing — absent when filing a new one */
   request?: RequestItem | null;
 }) {
+  /**
+   * Boleh disunting hanya sebelum ada tanda tangan sama sekali.
+   *
+   * Sesudah admin menyetujui (`menunggu_pimpinan`), menyunting isinya akan membuang
+   * persetujuan yang sudah diberikan tanpa ada yang tahu — jadi yang tersisa
+   * hanyalah membatalkan, dan itu ditangani `bisaBatal` di bawah.
+   */
   const editable = request
     ? request.status === "menunggu" || request.status === "revisi"
     : true;
   /** the values are prefilled in every mode; only `editable` decides if they move */
+  /**
+   * Dibatalkan boleh sampai keputusan akhir — termasuk saat sudah menunggu
+   * Pimpinan. Itu cuti miliknya sendiri; yang tidak boleh adalah MENYUNTINGnya
+   * sesudah ada yang menandatangani.
+   */
+  const bisaBatal = Boolean(
+    request &&
+      (request.status === "menunggu" ||
+        request.status === "revisi" ||
+        request.status === "menunggu_pimpinan"),
+  );
   const edit = request && editable ? request : null;
   const qc = useQueryClient();
   const [type, setType] = useState<LeaveType>("Cuti Tahunan");
@@ -176,6 +194,16 @@ export function LeaveSheet({
               </Btn>
             ) : null}
           </>
+        ) : bisaBatal ? (
+          // sudah lolos admin: isinya terkunci, tapi membatalkan masih haknya
+          <Btn
+            flex={1}
+            tone="danger"
+            disabled={cancel.isPending}
+            onPress={() => cancel.mutate()}
+          >
+            {cancel.isPending ? "Membatalkan…" : "Batalkan pengajuan"}
+          </Btn>
         ) : (
           <Btn flex={1} tone="ghost" onPress={onClose}>
             Tutup
@@ -363,6 +391,7 @@ export function OvertimeSheet({
   const [reason, setReason] = useState("");
 
   const viewing = Boolean(request);
+  // lembur satu tingkat, jadi tidak ada keadaan antara untuk dipertimbangkan
   const openState = request?.status === "menunggu" || request?.status === "revisi";
 
   const cancel = useMutation({

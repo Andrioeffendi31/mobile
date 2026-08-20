@@ -29,12 +29,16 @@ export const ATT = {
   tanpa_keterangan: { label: "Tanpa keterangan", fg: "$danger", bg: "$dangerSubtle" },
   /** bukan hari kerja divisinya, atau libur nasional — bukan tuduhan apa pun */
   libur: { label: "Libur", fg: "$fgMuted", bg: "$inset" },
+  /** jatuh sebelum aplikasi mulai mencatat; tidak dinilai, tidak dituduh */
+  belum_dicatat: { label: "Belum dicatat", fg: "$fgSubtle", bg: "$inset" },
 } as const;
 
 export const REQ = {
   menunggu: { label: "Menunggu", fg: "$warning", bg: "$warningSubtle" },
   /** accent, not warning: "menunggu" is HR's turn and this one is yours */
   revisi: { label: "Perlu revisi", fg: "$accent", bg: "$accentSubtle" },
+  /** sudah lolos satu tanda tangan; belum berlaku sampai Pimpinan memutus */
+  menunggu_pimpinan: { label: "Menunggu pimpinan", fg: "$info", bg: "$infoSubtle" },
   disetujui: { label: "Disetujui", fg: "$success", bg: "$successSubtle" },
   ditolak: { label: "Ditolak", fg: "$danger", bg: "$dangerSubtle" },
   dibatalkan: { label: "Dibatalkan", fg: "$fgMuted", bg: "$inset" },

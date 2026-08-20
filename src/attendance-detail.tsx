@@ -199,6 +199,33 @@ function Day({ day }: { day: AttendanceDay }) {
       </YStack>
       {day.note ? <Note text={day.note} fg="$fgMuted" bg="$inset" /> : null}
 
+      {/* Alasan yang Anda tulis sendiri, dan apa yang admin putuskan atasnya —
+          supaya tidak perlu bertanya apakah penjelasannya sampai atau tidak. */}
+      {day.lateReason || day.earlyReason ? (
+        <Note
+          fg={day.review === null ? "$fgMuted" : day.review.ok ? "$success" : "$danger"}
+          bg={
+            day.review === null
+              ? "$inset"
+              : day.review.ok
+                ? "$successSubtle"
+                : "$dangerSubtle"
+          }
+          text={[
+            day.lateReason ? `Alasan terlambat: ${day.lateReason}` : null,
+            day.earlyReason ? `Alasan pulang cepat: ${day.earlyReason}` : null,
+            day.review === null
+              ? "Menunggu tinjauan admin."
+              : day.review.ok
+                ? "Diterima admin, hari ini tercatat hadir."
+                : "Ditolak admin.",
+            day.review?.note,
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        />
+      ) : null}
+
       {/* the trail the list below spells out, as one picture — the ping that fell
           outside the fence is the thing you are looking for, and it is easier to
           spot on a map than in twelve rows of "1,2 km dari kantor" */}

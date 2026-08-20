@@ -9,7 +9,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image, ScrollView, Text, XStack, YStack, useTheme } from "tamagui";
 import { type Bootstrap, type Office, get, postForm } from "@/api";
 import { stopBackgroundPing } from "@/background-ping";
-import { formatJarak, tanggalPanjang, jarakMeter } from "@/format";
+import {
+  formatJarak,
+  jamWib,
+  jarakMeter,
+  pulangCepat,
+  tanggalPanjang,
+  terlambat,
+} from "@/format";
 import { canProcessImages, toWebp } from "@/image";
 import { Peta } from "@/peta";
 import { tint } from "@/theme";
@@ -18,6 +25,7 @@ import {
   Btn,
   Card,
   ErrorNote,
+  Field,
   Group,
   Jam,
   Note,
@@ -26,6 +34,7 @@ import {
   SheetShell,
   Skeleton,
   SkeletonRows,
+  TextArea,
   Toggle,
   useTabBack,
 } from "@/ui";
@@ -80,6 +89,20 @@ export default function Absen() {
   const [wfh, setWfh] = useState(false);
   const [officeId, setOfficeId] = useState<number | null>(null);
   const [picker, setPicker] = useState(false);
+  const [alasan, setAlasan] = useState("");
+  /**
+   * Jam WIB yang dipakai untuk memutuskan apakah alasannya wajib. Dibaca ulang
+   * tiap 30 detik selama layarnya dilihat, bukan sekali saat dibuka: tanpa itu,
+   * orang yang membuka layar 08:14 dan menekan tombolnya 08:16 ditolak server
+   * tanpa pernah melihat field yang seharusnya ia isi.
+   */
+  const [sekarang, setSekarang] = useState(() => jamWib());
+  useEffect(() => {
+    if (!isFocused) return;
+    setSekarang(jamWib());
+    const t = setInterval(() => setSekarang(jamWib()), 30_000);
+    return () => clearInterval(t);
+  }, [isFocused]);
 
   const data = me.data;
   const clockedIn = Boolean(data?.today.clockIn && !data.today.clockOut);
@@ -211,6 +234,22 @@ export default function Absen() {
   const noGeofence = action === "out" && data?.today.officeId === null;
   const inside = noGeofence || (meter !== null && meter <= chosen!.radiusM);
 
+  /**
+   * Alasan wajib — cermin aturan /api/me/clock, dan tidak lebih dari itu.
+   *
+   * WFH tidak pernah terlambat (server menyimpannya sebagai 'wfh', bukan
+   * 'telat'), jadi menyalakan sakelar WFH menghilangkan kewajibannya di sini
+   * juga. Yang menolak tetap servernya; ini hanya supaya fieldnya muncul.
+   */
+  const telatSekarang =
+    action === "in" &&
+    !wfh &&
+    Boolean(data) &&
+    terlambat(sekarang, data!.shift.start, data!.shift.toleranceMinutes);
+  const cepatSekarang = action === "out" && Boolean(data) && pulangCepat(sekarang, data!.shift);
+  const perluAlasan = telatSekarang || cepatSekarang;
+  const alasanKurang = perluAlasan && alasan.trim().length < 5;
+
   // kembali ke Beranda, bukan router.back() — lihat useTabBack di ui.tsx
   const close = useTabBack("/");
 
@@ -230,6 +269,9 @@ export default function Absen() {
       // only on the way in — the server reads clock-out's office off the row and
       // ignores anything sent here
       else if (action === "in" && chosen) form.append("locationId", String(chosen.id));
+      if (perluAlasan) {
+        form.append(telatSekarang ? "lateReason" : "earlyReason", alasan.trim());
+      }
       if (selfie) {
         // React Native's FormData takes {uri,name,type} for a file part; there is
         // no File to read the bytes into, and reading them would double memory
@@ -295,6 +337,7 @@ export default function Absen() {
         setWfh(false);
         setOfficeId(null);
         setPicker(false);
+        setAlasan("");
         picked.current = false;
         // clears the failure note too: a rejected punch must not greet the next visit
         resetSubmit();
@@ -304,7 +347,8 @@ export default function Absen() {
 
   /** the selfie counts here now: the server rejects a punch without one, so the
    *  button must not offer to send what cannot be accepted */
-  const blocked = !fix || !selfie || (!inside && !wfh) || submit.isPending || preparing;
+  const blocked =
+    !fix || !selfie || (!inside && !wfh) || alasanKurang || submit.isPending || preparing;
 
   // a cold deep link can land here before /api/me has answered — without this the
   // screen would flash "gagal memuat" at a request that is still in flight
@@ -476,6 +520,30 @@ export default function Absen() {
           </Card>
         ) : null}
 
+        {/* Muncul hanya saat memang di luar jamnya, dan hilang sendiri begitu WFH
+            dinyalakan — pertanyaan yang tidak relevan tidak ditanyakan. */}
+        {perluAlasan ? (
+          <Card gap={11}>
+            <XStack gap={10} alignItems="flex-start">
+              <Feather name="clock" size={15} color={tint("$warning")} />
+              <Text fontSize={12.5} color="$warning" lineHeight={18} flex={1}>
+                {telatSekarang
+                  ? `Sekarang ${sekarang}, lewat batas shift ${data.shift.start} (+${data.shift.toleranceMinutes} menit). Alasan wajib diisi dan akan ditinjau admin.`
+                  : `Shift Anda baru selesai ${data.shift.end}. Alasan wajib diisi dan akan ditinjau admin.`}
+              </Text>
+            </XStack>
+            <Field label={telatSekarang ? "Alasan terlambat" : "Alasan pulang cepat"}>
+              <TextArea
+                value={alasan}
+                onChangeText={setAlasan}
+                placeholder="Tuliskan alasan sejelas mungkin…"
+                multiline
+                maxLength={500}
+              />
+            </Field>
+          </Card>
+        ) : null}
+
         {submit.isError ? (
           <Note text={(submit.error as Error).message} fg="$danger" bg="$dangerSubtle" />
         ) : null}
@@ -510,7 +578,9 @@ export default function Absen() {
                 ? "Menunggu verifikasi lokasi"
                 : !inside && !wfh
                   ? "Tandai WFH untuk melanjutkan dari luar radius"
-                  : "Lokasi dan foto siap dikirim"}
+                  : alasanKurang
+                    ? `Isi alasan ${telatSekarang ? "keterlambatan" : "pulang cepat"} minimal 5 karakter`
+                    : "Lokasi dan foto siap dikirim"}
         </Text>
       </YStack>
 
