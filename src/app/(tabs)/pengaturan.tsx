@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Animated } from "react-native";
+import { Animated, Platform } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Linking from "expo-linking";
@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text, YStack, useTheme } from "tamagui";
 import { type Bootstrap, get, logout, postForm } from "@/api";
+import { openBatteryOptimizationExemption } from "@/battery-optimization";
 import { canPingInBackground } from "@/background-ping";
 import { canProcessImages, toWebp } from "@/image";
 import { available as passkeyAvailable, enrollPasskey } from "@/passkey";
@@ -272,19 +273,17 @@ export default function Pengaturan() {
             activity-nya tidak ada. Kalimat di bawah lebih tahan lama daripada
             intent yang rusak pada pembaruan MIUI berikutnya.
           */}
-          <Row
-            icon="battery-charging"
-            iconFg="$fgMuted"
-            iconBg="$inset"
-            label="Izinkan berjalan di latar belakang"
-            note="Matikan penghemat baterai untuk NanumHR, dan nyalakan “Autostart / Mulai otomatis” di aplikasi keamanan bawaan ponsel"
-            chevron
-            onPress={() =>
-              Linking.sendIntent(
-                "android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS",
-              ).catch(() => Linking.openSettings())
-            }
-          />
+          {Platform.OS === "android" ? (
+            <Row
+              icon="battery-charging"
+              iconFg="$fgMuted"
+              iconBg="$inset"
+              label="Izinkan berjalan di latar belakang"
+              note="Pilih “Tidak dibatasi/Unrestricted” untuk NanumHR. Di Xiaomi/Oppo/Vivo, nyalakan juga “Autostart / Mulai otomatis”."
+              chevron
+              onPress={() => void openBatteryOptimizationExemption()}
+            />
+          ) : null}
         </Group>
 
         <Group label="Tentang">

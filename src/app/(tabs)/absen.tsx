@@ -411,6 +411,13 @@ export default function Absen() {
           <Text fontSize={12} color="$fgMuted">
             {tanggalPanjang(data.today.date)} · Shift {data.shift.start}–{data.shift.end}
           </Text>
+          {/* Jam shift di atas sudah digeser server oleh izin ini; tanpa baris
+              ini, angka yang berubah tampak seperti kekeliruan. */}
+          {data.today.izin ? (
+            <Text fontSize={11.5} color="$info">
+              Izin {data.today.izin.start}–{data.today.izin.end} disetujui
+            </Text>
+          ) : null}
         </YStack>
       </YStack>
 

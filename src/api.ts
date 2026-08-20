@@ -280,6 +280,9 @@ export type Bootstrap = {
     selfieKey: string | null;
     /** the office chosen at clock-in; clock-out is locked to it */
     officeId: number | null;
+    /** izin setengah hari yang disetujui untuk hari ini; `shift` di bawah sudah
+     *  ikut digeser oleh jam ini */
+    izin: { start: string; end: string } | null;
   };
   /** this employee's division shift, already resolved against the company default */
   shift: { start: string; end: string; toleranceMinutes: number };
@@ -320,6 +323,8 @@ export type AttendanceDay = {
   ditolak: { type: string; startDate: string; endDate: string; note: string | null } | null;
   /** the same office as a point, for the map; null on a WFH day */
   officeGeo: { lat: number; lng: number; radiusM: number } | null;
+  /** izin setengah hari yang disetujui untuk hari itu */
+  izin: { start: string; end: string } | null;
   /** alasan yang ditulis sendiri di titik absen, wajib saat di luar jamnya */
   lateReason: string | null;
   earlyReason: string | null;
@@ -376,7 +381,7 @@ export type RequestItem = {
   /** cuti only */
   days?: number;
   /** the raw fields, so a revision reopens in the form that created it */
-  type?: "Cuti Tahunan" | "Cuti Sakit" | "Izin Khusus";
+  type?: "Cuti Tahunan" | "Cuti Sakit" | "Izin Khusus" | "Izin Setengah Hari";
   startDate?: string;
   endDate?: string;
   reason?: string;
@@ -384,11 +389,13 @@ export type RequestItem = {
   delegateName?: string | null;
   createdAt?: string;
   attachment?: { key: string; name: string | null; size: number | null } | null;
-  /** lembur only */
+  /** lembur only (dan `startTime`/`endTime` juga izin setengah hari) */
   minutes?: number;
   date?: string;
   startTime?: string;
   endTime?: string;
+  /** cuti only: tanda tangan surat izinnya, dipakai sebagai URL unduhan PDF */
+  suratToken?: string;
 };
 
 export type Requests = {

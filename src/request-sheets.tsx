@@ -5,7 +5,7 @@ import * as Linking from "expo-linking";
 import { Feather } from "@expo/vector-icons";
 import { ScrollView, Text, XStack, YStack } from "tamagui";
 import { tint } from "@/theme";
-import { type RequestItem, get, postForm, postJson } from "@/api";
+import { API, type RequestItem, get, postForm, postJson } from "@/api";
 import { DateInput, TimeInput } from "@/date-input";
 import { durasiJam, hariKerjaPreview, menitAntara, plusHari, tanggalPanjang, todayWib } from "@/format";
 import { toast } from "@/toast";
@@ -25,6 +25,10 @@ const LEAVE_TYPES = [
   { value: "Cuti Tahunan", note: "Memotong saldo cuti tahunan" },
   { value: "Cuti Sakit", note: "Wajib lampirkan surat dokter ke HR" },
   { value: "Izin Khusus", note: "Tanpa memotong saldo cuti" },
+  {
+    value: "Izin Setengah Hari",
+    note: "Beberapa jam pada satu hari · tidak dihitung terlambat",
+  },
 ] as const;
 
 type LeaveType = (typeof LEAVE_TYPES)[number]["value"];
@@ -71,6 +75,9 @@ export function LeaveSheet({
   const [start, setStart] = useState(plusHari(1));
   const [end, setEnd] = useState(plusHari(1));
   const [reason, setReason] = useState("");
+  /** jam izin — hanya dipakai jenis "Izin Setengah Hari" */
+  const [startTime, setStartTime] = useState("08:00");
+  const [endTime, setEndTime] = useState("12:00");
   const [delegateId, setDelegateId] = useState<number | null>(null);
   const [file, setFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   /** the attachment already on the server: kept, replaced, or explicitly dropped */
@@ -84,6 +91,8 @@ export function LeaveSheet({
     setStart(request?.startDate ?? plusHari(1));
     setEnd(request?.endDate ?? plusHari(1));
     setReason(request?.reason ?? "");
+    setStartTime(request?.startTime ?? "08:00");
+    setEndTime(request?.endTime ?? "12:00");
     setDelegateId(request?.delegateId ?? null);
     setFile(null);
     setKeptAttachment(request?.attachment ?? null);
@@ -95,8 +104,22 @@ export function LeaveSheet({
     if (editable && end < start) setEnd(start);
   }, [editable, start, end]);
 
+  /**
+   * Izin setengah hari itu satu tanggal dan dua jam: rentang tanggalnya dikunci
+   * ke satu hari (server juga menolak yang lain), dan yang divalidasi adalah
+   * jamnya. Angka di sini tetap sekadar pratinjau — aturannya ada di
+   * /api/me/requests, termasuk penolakan izin yang menutup seluruh shift.
+   */
+  const setengahHari = type === "Izin Setengah Hari";
+  useEffect(() => {
+    if (editable && setengahHari && end !== start) setEnd(start);
+  }, [editable, setengahHari, start, end]);
+
   const days = hariKerjaPreview(start, end);
-  const invalid = days < 1 || reason.trim().length < 5;
+  const menitIzin = menitAntara(startTime, endTime);
+  const invalid =
+    reason.trim().length < 5 ||
+    (setengahHari ? endTime <= startTime : days < 1);
 
   /** cancelling lives with the form because the form is where a request is now
    *  opened from — one place holds every action on a pengajuan */
@@ -127,6 +150,10 @@ export function LeaveSheet({
       form.append("startDate", start);
       form.append("endDate", end);
       form.append("reason", reason.trim());
+      if (setengahHari) {
+        form.append("startTime", startTime);
+        form.append("endTime", endTime);
+      }
       if (delegateId) form.append("delegateId", String(delegateId));
       if (file) {
         form.append("attachment", {
@@ -150,9 +177,11 @@ export function LeaveSheet({
       ]);
       onClose();
       toast(
-        edit
-          ? `Revisi terkirim · ${res.days} hari kerja`
-          : `Pengajuan cuti ${res.days} hari kerja terkirim`,
+        setengahHari
+          ? `Izin ${startTime}–${endTime} terkirim`
+          : edit
+            ? `Revisi terkirim · ${res.days} hari kerja`
+            : `Pengajuan cuti ${res.days} hari kerja terkirim`,
       );
     },
   });
@@ -282,9 +311,11 @@ export function LeaveSheet({
         </YStack>
       </Field>
 
-      <XStack gap={10}>
-        <YStack flex={1}>
-          <Field label="Mulai">
+      {/* Satu tanggal untuk izin berjam, dua untuk sisanya — kolom "Selesai"
+          yang selalu sama dengan "Mulai" hanya menawarkan cara untuk salah. */}
+      {setengahHari ? (
+        <>
+          <Field label="Tanggal izin">
             <DateInput
               value={start}
               onChange={setStart}
@@ -292,23 +323,63 @@ export function LeaveSheet({
               disabled={!editable}
             />
           </Field>
-        </YStack>
-        <YStack flex={1}>
-          <Field label="Selesai">
-            <DateInput
-              value={end}
-              onChange={setEnd}
-              minimumDate={new Date(`${start}T00:00:00`)}
-              disabled={!editable}
-            />
-          </Field>
-        </YStack>
-      </XStack>
+          <XStack gap={10}>
+            <YStack flex={1}>
+              <Field label="Izin dari jam">
+                <TimeInput
+                  value={startTime}
+                  onChange={setStartTime}
+                  disabled={!editable}
+                />
+              </Field>
+            </YStack>
+            <YStack flex={1}>
+              <Field label="Sampai jam">
+                <TimeInput
+                  value={endTime}
+                  onChange={setEndTime}
+                  disabled={!editable}
+                />
+              </Field>
+            </YStack>
+          </XStack>
+        </>
+      ) : (
+        <XStack gap={10}>
+          <YStack flex={1}>
+            <Field label="Mulai">
+              <DateInput
+                value={start}
+                onChange={setStart}
+                minimumDate={new Date()}
+                disabled={!editable}
+              />
+            </Field>
+          </YStack>
+          <YStack flex={1}>
+            <Field label="Selesai">
+              <DateInput
+                value={end}
+                onChange={setEnd}
+                minimumDate={new Date(`${start}T00:00:00`)}
+                disabled={!editable}
+              />
+            </Field>
+          </YStack>
+        </XStack>
+      )}
 
-      <Readout
-        label="Perkiraan durasi (hari libur nasional dihitung server)"
-        value={`${days} hari kerja`}
-      />
+      {setengahHari ? (
+        <Readout
+          label="Absen masuk setelah jam izin tidak dihitung terlambat"
+          value={endTime > startTime ? durasiJam(menitIzin) : "Jam belum benar"}
+        />
+      ) : (
+        <Readout
+          label="Perkiraan durasi (hari libur nasional dihitung server)"
+          value={`${days} hari kerja`}
+        />
+      )}
 
       <Field label="Alasan">
         <TextArea
@@ -320,6 +391,42 @@ export function LeaveSheet({
           backgroundColor={editable ? "$surface" : "$inset"}
         />
       </Field>
+
+      {/* Surat izin PDF untuk dicetak.
+          Servernya yang membuat PDF-nya, jadi di sini cukup membuka tautannya —
+          tidak ada expo-print/expo-sharing, yang keduanya modul native dan akan
+          MERUSAK pembaruan OTA di APK yang sudah terpasang (lihat ui.tsx).
+          Tanpa `?json=1` seperti lampiran: rute suratnya diotorisasi token di
+          path-nya, bukan cookie sesi, jadi browser sistem boleh membukanya
+          langsung. Hanya untuk pengajuan yang sudah ada — draf belum punya
+          nomor surat. */}
+      {request?.suratToken ? (
+        <Field label="Surat izin">
+          <XStack
+            alignItems="center"
+            gap={10}
+            paddingHorizontal={12}
+            paddingVertical={11}
+            borderRadius={11}
+            borderWidth={1}
+            borderColor="$lineStrong"
+            pressStyle={{ backgroundColor: "$inset" }}
+            onPress={() => {
+              Linking.openURL(
+                `${API}/api/surat/cuti/${request.suratToken}`,
+              ).catch(() => toast("Tidak ada aplikasi untuk membuka PDF"));
+            }}
+            accessibilityRole="button"
+            aria-label="Unduh surat izin PDF"
+          >
+            <Feather name="file-text" size={15} color={tint("$fgSubtle")} />
+            <Text fontSize={12.5} color="$fg" flex={1}>
+              Unduh surat izin (PDF)
+            </Text>
+            <Feather name="download" size={15} color={tint("$fgSubtle")} />
+          </XStack>
+        </Field>
+      ) : null}
 
       <Field label="Lampiran (opsional)">
         <AttachmentPicker

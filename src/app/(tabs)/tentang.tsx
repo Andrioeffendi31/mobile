@@ -1,4 +1,4 @@
-import { Image } from "react-native";
+import { Image, Platform } from "react-native";
 import Constants from "expo-constants";
 import * as Updates from "expo-updates";
 import { useIsFocused } from "expo-router";
@@ -25,6 +25,10 @@ export default function Tentang() {
     enabled: isFocused,
   });
   const version = Constants.expoConfig?.version ?? "—";
+  const packageId =
+    Platform.OS === "ios"
+      ? Constants.expoConfig?.ios?.bundleIdentifier
+      : Constants.expoConfig?.android?.package;
   const build = Updates.isEmbeddedLaunch
     ? "bawaan build"
     : (Updates.updateId?.slice(0, 8) ?? "—");
@@ -65,7 +69,7 @@ export default function Tentang() {
         <Group label="Aplikasi">
           <Row label="Versi" value={version} />
           <Row label="Build" value={build} />
-          <Row label="Paket" value={Constants.expoConfig?.android?.package ?? "—"} />
+          <Row label="Paket" value={packageId ?? "—"} />
         </Group>
 
         {me.data ? (

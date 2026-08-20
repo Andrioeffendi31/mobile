@@ -199,6 +199,15 @@ function Day({ day }: { day: AttendanceDay }) {
       </YStack>
       {day.note ? <Note text={day.note} fg="$fgMuted" bg="$inset" /> : null}
 
+      {/* Kenapa jam masuk hari itu lebih siang dan tetap tercatat hadir. */}
+      {day.izin ? (
+        <Note
+          fg="$info"
+          bg="$infoSubtle"
+          text={`Izin setengah hari ${day.izin.start}–${day.izin.end} disetujui. Batas keterlambatan hari itu mengikuti jam izin.`}
+        />
+      ) : null}
+
       {/* Alasan yang Anda tulis sendiri, dan apa yang admin putuskan atasnya —
           supaya tidak perlu bertanya apakah penjelasannya sampai atau tidak. */}
       {day.lateReason || day.earlyReason ? (

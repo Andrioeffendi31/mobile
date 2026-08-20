@@ -17,8 +17,11 @@ import { TamaguiProvider, Theme, YStack } from "tamagui";
 import {
   catchUpPing,
   clearQueue,
+  ensureBackgroundWatchdog,
+  masukTerakhir,
   startBackgroundPing,
   stopBackgroundPing,
+  stopBackgroundWatchdog,
 } from "@/background-ping";
 // side-effect import: hands expo-linear-gradient to Tamagui's <LinearGradient>.
 // Without it the native wrapper returns undefined instead of a component, which
@@ -63,6 +66,11 @@ export default function RootLayout() {
   useEffect(() => {
     void restore();
   }, [restore]);
+
+  // Pemantau koneksi TIDAK didaftarkan di sini lagi. Ia dipasang di module scope
+  // background-ping.ts, karena OS boleh menjalankan bundel ini tanpa satu pun
+  // komponen ter-mount — dan pendaftaran yang hidup di dalam useEffect membuat
+  // deteksi offline bergantung pada adanya layar yang sedang dirender.
 
   /**
    * The native window colour behind React's view tree. Without this it keeps the
@@ -304,7 +312,25 @@ function Trail({ cookie }: { cookie: string | null }) {
     // `clockedIn` is false while the bootstrap is pending. Treating that as real
     // attendance state stopped an existing Android service, then started it again
     // a moment later and immediately requested GPS — expensive churn at launch.
-    if (cookie && !me.data) return;
+    if (cookie && !me.data) {
+      // masih memuat: jangan sentuh apa pun
+      if (!me.isError) return;
+      /**
+       * Bootstrap-nya GAGAL, bukan sedang berjalan — praktisnya: tidak ada
+       * jaringan. Menyerah di sini berarti membuka aplikasi di tempat tanpa
+       * sinyal sesudah force-stop tidak memulihkan apa pun, padahal membuka
+       * aplikasi adalah satu-satunya pemulihan yang Android sediakan.
+       *
+       * Jadi keadaan terakhir yang diketahui yang dipakai: kalau jam masuk masih
+       * tersimpan, layanannya dinyalakan dan satu fix diambil dari GPS (yang
+       * tidak butuh jaringan) untuk diantre — persis seperti cabang offline di
+       * reconcileBackgroundPingFromServer.
+       */
+      const masuk = await masukTerakhir();
+      if (!masuk) return;
+      if (await startBackgroundPing(masuk)) await catchUpPing();
+      return;
+    }
     if (!clockedIn) {
       await stopBackgroundPing();
       if (!cookie) await clearQueue();
@@ -330,26 +356,34 @@ function Trail({ cookie }: { cookie: string | null }) {
     // aktif sejak awal. Tanpa baris ini, membuka aplikasi setelah force-stop
     // hanya menyalakan ulang penjadwalnya dan menunggu tiga jam lagi.
     await catchUpPing();
-  }, [clockedIn, cookie, me.data?.today.clockIn, bolehLokasi]);
+  }, [clockedIn, cookie, me.data, me.isError, me.data?.today.clockIn, bolehLokasi]);
 
   useEffect(() => {
     // Logout must stop tracking immediately. Signed-in reconciliation is not
     // needed for first paint, so leave the JS/native bridge quiet until Beranda
     // has settled.
     if (!cookie) {
+      void stopBackgroundWatchdog().catch((error) =>
+        console.warn("[ping] gagal menghentikan watchdog", (error as Error).message),
+      );
       void rukun().catch((error) =>
         console.warn("[ping] gagal menghentikan pelacakan", (error as Error).message),
       );
       return;
     }
-    if (!me.data) return;
+    void ensureBackgroundWatchdog().catch((error) =>
+      console.warn("[ping] gagal menyalakan watchdog", (error as Error).message),
+    );
+    // `isError` ikut membuka jalan: rukun() punya cabang offline sendiri, dan
+    // tanpa ini cabang itu tidak akan pernah dipanggil di peluncuran tanpa sinyal
+    if (!me.data && !me.isError) return;
     const timer = setTimeout(() => {
       void rukun().catch((error) =>
         console.warn("[ping] gagal menyelaraskan pelacakan", (error as Error).message),
       );
     }, 1_200);
     return () => clearTimeout(timer);
-  }, [cookie, me.data, rukun]);
+  }, [cookie, me.data, me.isError, rukun]);
 
   /**
    * Kembali ke depan adalah satu-satunya pemulihan yang tersedia setelah

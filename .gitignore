@@ -54,3 +54,5 @@ fcm-service-account.json
 # nyaris ikut ter-commit. Cocokkan nama bawaannya juga.
 *adminsdk*.json
 api-*-*.json
+
+*.apk

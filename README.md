@@ -112,11 +112,50 @@ ada yang crash.
 | Keystore + `ANDROID_CERT_SHA256` | ✅ dibuat & dipasang di Vercel |
 | `assetlinks.json` | ✅ tersaji dari backend, terisi otomatis dari env di atas |
 | FCM (`google-services.json` + service account) | ⬜ lihat bagian di atas |
-| Lokasi latar belakang | ✅ hanya butuh izin "Izinkan sepanjang waktu" dari pengguna |
+| iOS bundle id | ✅ `app.nanumhr` |
+| iOS Associated Domains | ⚠️ app config siap; domain web harus mengembalikan AASA `200 OK` |
+| iOS permission strings | ✅ lokasi, background location, kamera, foto, Face ID |
+| iOS build number | ✅ `1` untuk rilis awal, lalu dinaikkan oleh EAS production build |
+| iOS background modes | ✅ `location`, `processing` |
+| iOS privacy manifest | ✅ required-reason API dari dependency native dideklarasikan di `app.json` |
+| iCloud Document Picker | ✅ `usesIcloudStorage` + plugin `expo-document-picker` |
+| Lokasi latar belakang | ✅ izin "Izinkan sepanjang waktu" + foreground service selama absen masuk |
+| Watchdog latar belakang | ✅ `expo-background-task` mencoba memulihkan service/flush antrean saat OS memberi jatah background |
+| Peringatan koneksi putus | ✅ NetInfo saat app hidup + ping latar belakang saat gagal kirim |
+| Pengecualian hemat baterai | ✅ tombol Pengaturan membuka dialog Android untuk “Unrestricted / Ignore battery optimization” |
+| Pulih setelah reboot | ✅ `RECEIVE_BOOT_COMPLETED` + `WAKE_LOCK` dideklarasikan di `app.json`, dan `TaskBroadcastReceiver` expo-task-manager mendengarkan `BOOT_COMPLETED` |
+| Pulih saat dibuka tanpa sinyal | ✅ jam masuk tersimpan (`nanumhr.trail-status`) dipakai saat `/api/me` tidak bisa dihubungi |
+| Jejak berhenti terlihat admin | ✅ papan `/kehadiran` menandai orang yang masih clock in tapi jejaknya berhenti >4 jam |
+
+Dua izin di daftar itu — `RECEIVE_BOOT_COMPLETED` dan `WAKE_LOCK` — sebenarnya
+sudah ikut ke dalam APK secara **transitif** (dari manifest `expo-notifications`
+dan WorkManager). Keduanya tetap dituliskan di `app.json` supaya pemulihan
+setelah reboot tidak bergantung pada keputusan paket lain: mencabut push suatu
+hari akan mematikannya tanpa satu pun galat. Perubahan ini hanya berlaku pada
+**build baru**, bukan lewat OTA.
 
 Tombol passkey **sengaja disembunyikan** saat aplikasi menunjuk ke server LAN
 (`http://…`): passkey tidak bisa diikat ke host non-HTTPS, jadi profil
 `development` tidak menampilkannya — pakai profil `preview` untuk mengujinya.
+
+Untuk iOS, domain pada `ios.associatedDomains` harus menyajikan
+`/.well-known/apple-app-site-association` dengan status `200 OK` sebelum submit
+App Store. Jika endpoint mengembalikan `APPLE_TEAM_ID belum dikonfigurasi`, isi
+Apple Team ID di environment production web/Vercel, lalu redeploy.
+
+Watchdog ini bukan jalan pintas untuk force-stop: Android/iOS tetap boleh
+mematikan app yang ditutup paksa pengguna atau dibatasi mode hemat daya. Yang
+ditutup di sini adalah kasus yang masih diizinkan OS — proses mati biasa, reboot,
+service yang perlu didaftarkan ulang, dan antrean ping yang menunggu jaringan.
+Peringatan koneksi putus mengikuti batas yang sama: saat proses aplikasi masih
+hidup, NetInfo memberi tahu segera; saat hanya task latar belakang yang tersisa,
+notifikasi muncul pada wake-up/ping berikutnya yang mendeteksi jaringan gagal.
+Pengecualian hemat baterai tetap keputusan pengguna/OS: aplikasi hanya bisa
+membuka permintaan Android resmi, bukan mengubah setelan itu diam-diam.
+Di iOS tidak ada API pengecualian hemat baterai seperti Android. Background
+tracking hanya bisa berjalan melalui izin "Always", mode lokasi latar belakang,
+dan keputusan scheduler iOS; setelah user force-quit dari app switcher, wake-up
+latar belakang bisa berhenti sampai user membuka aplikasi lagi.
 
 ## Yang belum ada
 
