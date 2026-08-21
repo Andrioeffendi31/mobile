@@ -30,14 +30,24 @@ const ALL_IDS = WEEKDAYS.flatMap((d) => KINDS.map((k) => idFor(k, d)));
  * needed when one of those inputs really changed. */
 let lastSignature: string | null = null;
 
-const CHANNEL = "absen";
+/**
+ * Bumped from "absen": the settings below (HIGH, two buzzes, system tone) were
+ * already written that way, but Android froze the original channel at whatever
+ * it was first created with, so every install that had already seen it kept the
+ * old behaviour. A new id is the only way to re-state them.
+ */
+const CHANNEL = "absen-v2";
+const CHANNEL_LAMA = "absen";
 
 /**
  * How early the alarm goes off. A reminder that arrives *at* the shift start is
- * already late — the point is the ten minutes somebody still has to park, walk in
- * and open the app.
+ * already late — the point is the quarter hour somebody still has to park, walk
+ * in and open the app.
+ *
+ * Exported so the settings screen states the same number; two places writing
+ * "10 menit" by hand is how a note ends up lying about the alarm.
  */
-const LEAD_MINUTES = 10;
+export const LEAD_MINUTES = 15;
 
 /**
  * The shift time moved back by the lead, as a weekly trigger's fields.
@@ -66,10 +76,10 @@ if (__DEV__) {
       throw new Error(`alarmAt: ${JSON.stringify(got)} ≠ ${JSON.stringify(want)}`);
     }
   };
-  eq(alarmAt("08:00", 2), { weekday: 2, hour: 7, minute: 50 });
-  eq(alarmAt("17:05", 6), { weekday: 6, hour: 16, minute: 55 });
-  eq(alarmAt("00:05", 2), { weekday: 1, hour: 23, minute: 55 }); // Monday shift, Sunday alarm
-  eq(alarmAt("00:00", 1), { weekday: 7, hour: 23, minute: 50 }); // Sunday wraps to Saturday
+  eq(alarmAt("08:00", 2), { weekday: 2, hour: 7, minute: 45 });
+  eq(alarmAt("17:05", 6), { weekday: 6, hour: 16, minute: 50 });
+  eq(alarmAt("00:05", 2), { weekday: 1, hour: 23, minute: 50 }); // Monday shift, Sunday alarm
+  eq(alarmAt("00:00", 1), { weekday: 7, hour: 23, minute: 45 }); // Sunday wraps to Saturday
 }
 
 /**
@@ -84,16 +94,21 @@ if (__DEV__) {
  *
  * Android freezes a channel's settings the moment it is first created — the user
  * owns them after that. Getting importance or vibration wrong here cannot be
- * fixed by editing this object; it would need a new channel id.
+ * fixed by editing this object; it needs a new channel id, which is what
+ * CHANNEL_LAMA is a gravestone for.
  */
 async function ensureChannel() {
   if (Platform.OS !== "android") return;
+  // otherwise the dead channel sits in the app's notification settings forever,
+  // one line above its replacement and with the same name
+  await Notifications.deleteNotificationChannelAsync(CHANNEL_LAMA).catch(() => {});
   await Notifications.setNotificationChannelAsync(CHANNEL, {
     name: "Pengingat absen",
     importance: Notifications.AndroidImportance.HIGH,
     sound: "default",
     enableVibrate: true,
-    vibrationPattern: [0, 400, 200, 400],
+    // getar–jeda–getar: dua denyut, bukan satu getaran panjang
+    vibrationPattern: [0, 400, 250, 400],
     lightColor: "#4f46e5",
   });
 }
@@ -180,6 +195,9 @@ export async function syncReminders(me: Bootstrap | undefined) {
             kind === "in"
               ? `Shift Anda mulai ${time}. Ketuk untuk absen sekarang.`
               : `Shift Anda selesai ${time}. Jangan lupa absen keluar.`,
+          // Android takes the tone from the channel; iOS has no channels and
+          // stays silent unless the content asks for one.
+          sound: "default",
           // the tab layout routes on this, same as a server push
           data: { route: "/absen" },
         },

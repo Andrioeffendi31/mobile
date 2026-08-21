@@ -14,6 +14,7 @@ import { canProcessImages, toWebp } from "@/image";
 import { available as passkeyAvailable, enrollPasskey } from "@/passkey";
 import { registerForPush, unregisterFromPush, usePushStatus } from "@/push";
 import { usePrefs } from "@/prefs";
+import { LEAD_MINUTES } from "@/reminders";
 import { tint } from "@/theme";
 import { toast } from "@/toast";
 import {
@@ -531,8 +532,8 @@ function Notifikasi({ shift }: { shift?: Bootstrap["shift"] }) {
         noteTone={reminder ? "$accent" : "$fgSubtle"}
         note={
           reminder
-            ? `Berbunyi & bergetar Senin–Jumat, 10 menit sebelum ${shift ? `${shift.start} & ${shift.end}` : "jam shift"}`
-            : "Nonaktif · alarm 10 menit sebelum jam masuk dan jam keluar"
+            ? `Berbunyi & bergetar Senin–Jumat, ${LEAD_MINUTES} menit sebelum ${shift ? `${shift.start} & ${shift.end}` : "jam shift"}`
+            : `Nonaktif · alarm ${LEAD_MINUTES} menit sebelum jam masuk dan jam keluar`
         }
         right={
           <Toggle label="Pengingat absen" checked={reminder} onChange={setReminder} />

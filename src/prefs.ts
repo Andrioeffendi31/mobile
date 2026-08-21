@@ -46,10 +46,10 @@ type PrefsState = {
   /**
    * Whether to schedule the clock-in/out alarm (see reminders.ts).
    *
-   * Off by default, unlike `push`. Push only relays news about something the
-   * employee started themselves; this one makes the phone buzz at 08:00 whether
-   * or not anybody asked, and an update that starts doing that to everybody is a
-   * support queue, not a feature.
+   * On by default. It was off at first, on the theory that a phone buzzing at
+   * 07:45 uninvited is a support queue — but a presensi app whose one alarm is
+   * hidden behind a switch nobody finds is the bigger complaint, and the switch
+   * is still right there for whoever disagrees.
    */
   reminder: boolean;
   setReminder: (on: boolean) => void;
@@ -65,7 +65,7 @@ export const usePrefs = create<PrefsState>()(
       setTheme: (theme) => set({ theme }),
       push: true,
       setPush: (push) => set({ push }),
-      reminder: false,
+      reminder: true,
       setReminder: (reminder) => set({ reminder }),
       passkeyIds: [],
       addPasskeyId: (id) =>
@@ -77,6 +77,17 @@ export const usePrefs = create<PrefsState>()(
     {
       name: "nanumhr.prefs",
       storage,
+      version: 1,
+      // v0 shipped the alarm off by default, so a stored `false` from that build
+      // is the absence of a choice, not a choice. Drop it and let the new default
+      // apply; a `false` written after this migration is stored at v1 and stays.
+      migrate: (persisted, version) => {
+        if (version === 0 && persisted && typeof persisted === "object") {
+          const { reminder: _wasNeverAsked, ...rest } = persisted as Record<string, unknown>;
+          return rest as PrefsState;
+        }
+        return persisted as PrefsState;
+      },
       // `ready` describes this process, not the user's choice — persisting it
       // would restore a stale "already hydrated" on the next launch
       partialize: ({ theme, push, reminder, passkeyIds }) => ({
