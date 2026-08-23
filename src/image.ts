@@ -100,3 +100,85 @@ export async function shrinkImage(
 
   return hasil.saveAsync({ format: SaveFormat.WEBP, compress });
 }
+
+/** Ekstensi tanpa titik, huruf besar; "" kalau tidak ada. */
+const extOf = (name: string) =>
+  name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toUpperCase() : "";
+
+/** Nama asal dengan ekstensi diganti. */
+export const gantiEkstensi = (name: string, ext: string) =>
+  `${name.includes(".") ? name.slice(0, name.lastIndexOf(".")) : name}.${ext}`;
+
+/**
+ * HEIC/HEIF ikut meski BUKAN format yang diterima server (`heic` tidak ada di
+ * DOC_EXT) — justru itu gunanya: foto iPhone lolos karena sudah menjadi WebP
+ * sebelum sampai ke sana.
+ */
+const COMPRESSIBLE = new Set(["JPG", "JPEG", "PNG", "WEBP", "GIF", "HEIC", "HEIF"]);
+
+/**
+ * Di bawah ini mengubah sandi ulang hanya membuang waktu — sebuah tanda tangan
+ * pindaian 40 KB tidak akan menyusut lagi, dan penggunanya menunggu percuma.
+ */
+const AMBANG_KOMPRESI = 600 * 1024;
+
+/** Bagian multipart React Native: {uri,name,type}, bukan Blob. */
+export type BagianUnggah = { uri: string; name: string; type: string };
+
+/**
+ * Satu berkas pilihan menjadi bagian multipart yang layak diunggah — dikecilkan
+ * kalau ia gambar, apa adanya kalau bukan.
+ *
+ * Dipakai oleh unggahan Berkas DAN lampiran pengajuan. Sebelumnya hanya Berkas
+ * yang mengecilkan, dan salinan kedua aturannya di layar pengajuan berarti
+ * memperbaiki satu bug harus dilakukan dua kali — jadi aturannya tinggal di sini,
+ * bukan di layarnya.
+ *
+ * Kompresinya di ponsel dan bukan di server karena yang mahal bukan CPU-nya
+ * melainkan perjalanannya: bucket R2 hanya 10 GB, dan satu foto 12 MP yang
+ * diunggah utuh memakan jatah yang sama dengan puluhan dokumen.
+ *
+ * Tiga penjaga sebelum mengecilkan, masing-masing menjawab kegagalan yang
+ * berbeda: `canProcessImages()` untuk build lama yang belum memuat
+ * expo-image-manipulator, `AMBANG_KOMPRESI` untuk berkas yang memang sudah kecil,
+ * dan `try/catch` untuk berkas rusak atau format asing — unggahan yang gagal
+ * dikompres harus tetap TERUNGGAH, bukan gagal sama sekali.
+ */
+export async function siapkanUnggahan(file: {
+  uri: string;
+  name: string;
+  size?: number | null;
+  mimeType?: string | null;
+}): Promise<BagianUnggah> {
+  const apaAdanya: BagianUnggah = {
+    uri: file.uri,
+    name: file.name,
+    type: file.mimeType ?? "application/octet-stream",
+  };
+
+  if (
+    !COMPRESSIBLE.has(extOf(file.name)) ||
+    !canProcessImages() ||
+    (file.size ?? 0) <= AMBANG_KOMPRESI
+  ) {
+    return apaAdanya;
+  }
+
+  try {
+    const kecil = await shrinkImage(file.uri);
+    /**
+     * Namanya ikut berganti ekstensi, dan itu wajib: nama inilah yang dipakai
+     * server sebagai nama unduhan, jadi menyimpan nama .jpg untuk byte WebP
+     * berarti menyerahkan berkas yang tidak bisa dibuka galeri orangnya. Nama,
+     * kolom `ext`, dan object key harus sepakat.
+     */
+    return {
+      uri: kecil.uri,
+      name: gantiEkstensi(file.name, "webp"),
+      type: "image/webp",
+    };
+  } catch (error) {
+    console.warn("[unggah] gagal mengecilkan", (error as Error).message);
+    return apaAdanya;
+  }
+}

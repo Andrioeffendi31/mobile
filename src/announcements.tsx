@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { Image } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { Paragraph, Text, XStack, YStack, useTheme } from "tamagui";
-import { type Announcements, type Bootstrap, get } from "@/api";
+import { API, type Announcements, type Bootstrap, get, useSession } from "@/api";
 import { cat, GRAD, tint } from "@/theme";
 import {
   Badge,
@@ -189,6 +190,14 @@ function Detail({
   onClose: () => void;
 }) {
   const tone = item ? cat(item.category) : null;
+  /**
+   * Banner dilayani /api/files yang memeriksa sesi tiap permintaan, bukan URL
+   * bertanda tangan — jadi cookienya ikut sebagai header pada permintaan
+   * gambarnya sendiri, persis seperti foto profil di ui.tsx dan selfie di
+   * attendance-detail.tsx. Tidak ada URL yang kedaluwarsa semenit setelah
+   * sheetnya dibuka.
+   */
+  const cookie = useSession((st) => st.cookie);
 
   return (
     <SheetShell
@@ -210,6 +219,20 @@ function Detail({
               {item.author} · {item.date}
             </Text>
           </XStack>
+          {item.bannerKey ? (
+            // 16:9 dan sudut 20 — menyamai radius kartu di daftar atasnya, bukan
+            // angka baru. Tinggi ditetapkan lewat rasio supaya sheetnya tidak
+            // melompat saat gambarnya selesai dimuat.
+            <Image
+              source={{
+                uri: `${API}/api/files/${item.bannerKey}`,
+                ...(cookie ? { headers: { cookie } } : {}),
+              }}
+              style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: 20 }}
+              resizeMode="cover"
+              accessibilityLabel={`Banner ${item.title}`}
+            />
+          ) : null}
           <Paragraph fontSize={13.5} color="$fgMuted" lineHeight={21}>
             {item.body}
           </Paragraph>

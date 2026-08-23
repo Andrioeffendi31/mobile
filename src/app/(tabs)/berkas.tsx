@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import { Image, Spinner, Text, XStack, YStack, useTheme } from "tamagui";
 import { API, type Documents, get, postForm, postJson } from "@/api";
-import { canProcessImages, shrinkImage } from "@/image";
+import { siapkanUnggahan } from "@/image";
 import { toast } from "@/toast";
 import {
   Btn,
@@ -28,23 +28,6 @@ type DocumentItem = Documents["items"][number];
 type Preview = { doc: DocumentItem; url: string; kind: "image" | "pdf" };
 
 const IMAGE_EXTENSIONS = new Set(["JPG", "JPEG", "PNG", "WEBP", "GIF"]);
-/** HEIC ikut dikenali di sini meski BUKAN gambar yang bisa ditampilkan layar ini:
- *  server pun menolaknya (`heic` tidak ada di DOC_EXT). Justru itu gunanya — foto
- *  iPhone lolos karena sudah menjadi WebP sebelum sampai ke sana. */
-const COMPRESSIBLE = new Set([...IMAGE_EXTENSIONS, "HEIC", "HEIF"]);
-
-/** ekstensi tanpa titik, huruf besar; "" kalau tidak ada. Satu baris di sini,
- *  bukan impor: mobile sengaja tidak mengambil apa pun dari web/ (PRD-Mobile §10). */
-const extOf = (name: string) =>
-  name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toUpperCase() : "";
-const gantiEkstensi = (name: string, ext: string) =>
-  `${name.includes(".") ? name.slice(0, name.lastIndexOf(".")) : name}.${ext}`;
-
-/**
- * Di bawah ini mengubah sandi ulang hanya membuang waktu — sebuah tanda tangan
- * pindaian 40 KB tidak akan menyusut lagi, dan pengguna menunggu percuma.
- */
-const AMBANG_KOMPRESI = 600 * 1024;
 const fileKind = (doc: DocumentItem) => {
   const ext = doc.ext.toUpperCase();
   if (IMAGE_EXTENSIONS.has(ext)) return "image" as const;
@@ -97,52 +80,15 @@ export default function Berkas() {
     onSettled: () => setBusyId(null),
   });
 
-  /**
-   * Unggah, dengan gambar dikecilkan lebih dulu.
-   *
-   * Kompresinya terjadi di ponsel dan bukan di server karena yang mahal bukan CPU-nya
-   * melainkan perjalanannya: bucket R2 hanya 10 GB, dan sebuah foto 12 MP yang
-   * diunggah utuh memakan jatah yang sama dengan puluhan dokumen.
-   *
-   * Tiga penjaga sebelum mengecilkan, masing-masing menjawab kegagalan yang berbeda:
-   * `canProcessImages()` untuk build lama yang belum memuat expo-image-manipulator,
-   * `AMBANG_KOMPRESI` untuk berkas yang memang sudah kecil, dan `try/catch` untuk
-   * berkas rusak atau format asing — unggahan yang gagal dikompres harus tetap
-   * terunggah, bukan gagal sama sekali.
-   */
+  /** Unggah, dengan gambar dikecilkan lebih dulu — aturannya ada di
+   *  `siapkanUnggahan` di image.ts, dipakai bersama lampiran pengajuan. */
   const upload = useMutation({
     mutationFn: async () => {
       const picked = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
       if (picked.canceled) return null;
       const file = picked.assets[0];
 
-      let bagian = {
-        uri: file.uri,
-        name: file.name,
-        type: file.mimeType ?? "application/octet-stream",
-      };
-      if (
-        COMPRESSIBLE.has(extOf(file.name)) &&
-        canProcessImages() &&
-        (file.size ?? 0) > AMBANG_KOMPRESI
-      ) {
-        try {
-          const kecil = await shrinkImage(file.uri);
-          /**
-           * Namanya ikut berganti ekstensi, dan itu wajib: `documents.name` yang
-           * dipakai server sebagai nama unduhan, jadi menyimpan nama .jpg untuk byte
-           * WebP berarti menyerahkan berkas yang tidak bisa dibuka galeri orangnya.
-           * Nama, kolom `ext`, dan object key harus sepakat.
-           */
-          bagian = {
-            uri: kecil.uri,
-            name: gantiEkstensi(file.name, "webp"),
-            type: "image/webp",
-          };
-        } catch (error) {
-          console.warn("[berkas] gagal mengecilkan", (error as Error).message);
-        }
-      }
+      const bagian = await siapkanUnggahan(file);
 
       const form = new FormData();
       form.append("file", bagian as unknown as Blob);

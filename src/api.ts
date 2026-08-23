@@ -428,6 +428,10 @@ export type Announcements = {
     pinned: boolean;
     author: string;
     date: string;
+    /** kunci objek R2 banner, null kalau pengumumannya tanpa gambar. Dilayani
+     *  /api/files, yang butuh sesi — jadi gambarnya diminta dengan header cookie,
+     *  sama seperti foto profil dan selfie absensi. */
+    bannerKey: string | null;
   }[];
 };
 

@@ -10,6 +10,7 @@ import { DateInput, TimeInput } from "@/date-input";
 import { durasiJam, hariKerjaPreview, menitAntara, plusHari, tanggalPanjang, todayWib } from "@/format";
 import { toast } from "@/toast";
 import { Btn, Field, Note, Readout, ReqBadge, SheetShell, TextArea } from "@/ui";
+import { siapkanUnggahan } from "@/image";
 
 /**
  * The two request forms (PRD-Mobile §6.3).
@@ -143,7 +144,7 @@ export function LeaveSheet({
    * sync. PUT resubmits a revision, POST files a new request.
    */
   const submit = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const form = new FormData();
       form.append("kind", "cuti");
       form.append("type", type);
@@ -156,11 +157,13 @@ export function LeaveSheet({
       }
       if (delegateId) form.append("delegateId", String(delegateId));
       if (file) {
-        form.append("attachment", {
-          uri: file.uri,
-          name: file.name,
-          type: file.mimeType ?? "application/octet-stream",
-        } as unknown as Blob);
+        /**
+         * Dikecilkan dulu kalau ia gambar — aturannya sama persis dengan unggahan
+         * Berkas, dan tinggal di image.ts supaya tidak ada salinan kedua yang
+         * harus ikut diperbaiki setiap kali aturannya berubah. Foto surat dokter
+         * 12 MP dulu naik utuh dari sini.
+         */
+        form.append("attachment", (await siapkanUnggahan(file)) as unknown as Blob);
       }
       if (!edit) return postForm<{ days: number }>("/api/me/requests", form);
 
