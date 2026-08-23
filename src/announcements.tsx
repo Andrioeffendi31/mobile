@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Image } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
@@ -198,6 +198,12 @@ function Detail({
    * sheetnya dibuka.
    */
   const cookie = useSession((st) => st.cookie);
+  /** rasio banner, diketahui hanya setelah gambarnya dimuat; 16:9 sementara */
+  const [rasio, setRasio] = useState(16 / 9);
+  // sheetnya dipakai ulang untuk tiap pengumuman, jadi rasio milik gambar
+  // sebelumnya harus dilupakan — kalau tidak, banner berikutnya sempat tampil
+  // pada bentuk yang bukan miliknya sampai onLoad-nya menyusul
+  useEffect(() => setRasio(16 / 9), [item?.bannerKey]);
 
   return (
     <SheetShell
@@ -220,16 +226,26 @@ function Detail({
             </Text>
           </XStack>
           {item.bannerKey ? (
-            // 16:9 dan sudut 20 — menyamai radius kartu di daftar atasnya, bukan
-            // angka baru. Tinggi ditetapkan lewat rasio supaya sheetnya tidak
-            // melompat saat gambarnya selesai dimuat.
+            /**
+             * Utuh pada rasio aslinya, bukan dipotong.
+             *
+             * Rasionya tidak bisa diketahui sebelum gambarnya dimuat — server
+             * hanya mengirim kuncinya — jadi `onLoad` yang memberitahukannya, dan
+             * sampai saat itu 16:9 dipakai sebagai tempat duduk sementara supaya
+             * sheetnya tidak melompat. Sudut 20 menyamai kartu di daftar atasnya,
+             * bukan angka baru.
+             */
             <Image
               source={{
                 uri: `${API}/api/files/${item.bannerKey}`,
                 ...(cookie ? { headers: { cookie } } : {}),
               }}
-              style={{ width: "100%", aspectRatio: 16 / 9, borderRadius: 20 }}
-              resizeMode="cover"
+              onLoad={(e) => {
+                const { width, height } = e.nativeEvent.source;
+                if (width > 0 && height > 0) setRasio(width / height);
+              }}
+              style={{ width: "100%", aspectRatio: rasio, borderRadius: 20 }}
+              resizeMode="contain"
               accessibilityLabel={`Banner ${item.title}`}
             />
           ) : null}

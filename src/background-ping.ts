@@ -226,7 +226,13 @@ async function sendPing(
   lng: number,
   at: number,
   cookie: string,
-  opsi: { mocked?: boolean; location?: string; delayed?: boolean } = {},
+  opsi: {
+    mocked?: boolean;
+    location?: string;
+    delayed?: boolean;
+    /** fix yang diambil tepat saat koneksi kembali, di luar irama 3 jam */
+    reconnect?: boolean;
+  } = {},
 ): Promise<Hasil> {
   /**
    * Dengan timeout, dan itu bukan kehati-hatian teoretis: di jaringan seluler
@@ -250,6 +256,7 @@ async function sendPing(
         ...(opsi.mocked ? { mocked: true } : null),
         ...(opsi.location ? { location: opsi.location } : null),
         ...(opsi.delayed ? { delayed: true } : null),
+        ...(opsi.reconnect ? { reconnect: true } : null),
       }),
     });
     // 400 means the day is over (clocked out, or never clocked in) — the phone
@@ -319,7 +326,10 @@ async function enqueue(lat: number, lng: number, at: number, tempat?: string) {
  * susulan saat aplikasi kembali ke depan, supaya keduanya tidak menyimpan salinan
  * aturan yang sama.
  */
-export async function kirimAtauAntre(fix: Location.LocationObject) {
+export async function kirimAtauAntre(
+  fix: Location.LocationObject,
+  opsi: { reconnect?: boolean } = {},
+) {
   const cookie = await SecureStore.getItemAsync(SESSION_KEY).catch(() => null);
   // signed out while the task was queued: nothing to report it to
   if (!cookie) {
@@ -343,6 +353,7 @@ export async function kirimAtauAntre(fix: Location.LocationObject) {
     // Ping tidak pernah ditolak karenanya — server yang menandainya untuk HR.
     mocked: fix.mocked,
     location: tempat,
+    reconnect: opsi.reconnect,
   });
 
   if (hasil === "offline") {
@@ -607,7 +618,9 @@ const SUSUL_KEY = "nanumhr.last-catchup";
  */
 let susulBerjalan: Promise<void> | null = null;
 
-export function catchUpPing(opsi: { force?: boolean } = {}): Promise<void> {
+export function catchUpPing(
+  opsi: { force?: boolean; reconnect?: boolean } = {},
+): Promise<void> {
   if (susulBerjalan && !opsi.force) return susulBerjalan;
   const sesudah = susulBerjalan ?? Promise.resolve();
   // `dipegang` HARUS promise yang sama dengan yang disimpan di `susulBerjalan`.
@@ -626,7 +639,7 @@ export function catchUpPing(opsi: { force?: boolean } = {}): Promise<void> {
   return dipegang;
 }
 
-async function jalankanSusulan(opsi: { force?: boolean }) {
+async function jalankanSusulan(opsi: { force?: boolean; reconnect?: boolean }) {
   const cookie = await SecureStore.getItemAsync(SESSION_KEY).catch(() => null);
   if (!cookie) return;
 
@@ -648,7 +661,7 @@ async function jalankanSusulan(opsi: { force?: boolean }) {
     const fix = await Location.getCurrentPositionAsync({
       accuracy: Location.Accuracy.Balanced,
     });
-    await kirimAtauAntre(fix);
+    await kirimAtauAntre(fix, { reconnect: opsi.reconnect });
   } catch {
     // GPS tidak menjawab: wake-up terjadwal berikutnya membawa fix segar. Antreannya
     // mungkin sudah terkirim di atas, jadi kalimatnya tetap perlu disegarkan.
@@ -708,7 +721,19 @@ export async function reconcileBackgroundPingFromServer(opsi: { forceCatchUp?: b
   );
   const started = await startBackgroundPing(clockIn.slice(0, 5));
   if (started && (!wasRunning || opsi.forceCatchUp)) {
-    await catchUpPing({ force: opsi.forceCatchUp });
+    /**
+     * `forceCatchUp` HANYA disetel oleh jalur pulihnya koneksi — listener NetInfo
+     * dan watchdog yang melihat `recovered`. Jadi ia sekaligus jawaban untuk
+     * "apakah fix ini diambil karena koneksinya baru kembali?", dan servernya
+     * memakai jawaban itu untuk melepaskan ping ini dari jeda 3 jam.
+     *
+     * Cabang offline di atas memakai `force: true` juga, tapi TIDAK menandainya
+     * reconnect — di sana servernya justru sedang tidak bisa dihubungi.
+     */
+    await catchUpPing({
+      force: opsi.forceCatchUp,
+      reconnect: opsi.forceCatchUp,
+    });
   }
 }
 
