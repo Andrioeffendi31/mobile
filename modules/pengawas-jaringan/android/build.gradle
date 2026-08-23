@@ -1,0 +1,18 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+// expo-module-gradle-plugin menurunkan versionName dari `version` proyeknya, dan
+// menolak konfigurasi tanpa itu. Angkanya milik modul ini sendiri, tidak ada
+// hubungannya dengan versi aplikasi.
+group = 'app.nanumhr'
+version = '1.0.0'
+
+android {
+  namespace "app.nanumhr.pengawas"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}

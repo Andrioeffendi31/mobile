@@ -1,0 +1,25 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="app.nanumhr.pengawas" >
+4
+5    <uses-sdk android:minSdkVersion="24" />
+6
+7    <application>
+7-->/Users/andrioeffendi/code/hr-app/mobile/modules/pengawas-jaringan/android/src/main/AndroidManifest.xml:2:3-12:17
+8
+9        <!--
+10      JobService wajib mengumumkan dirinya dan wajib dilindungi izin ini —
+11      tanpanya JobScheduler menolak menjadwalkannya sama sekali. `exported=false`
+12      karena satu-satunya yang boleh memanggilnya adalah sistem.
+13        -->
+14        <service
+14-->/Users/andrioeffendi/code/hr-app/mobile/modules/pengawas-jaringan/android/src/main/AndroidManifest.xml:8:5-11:34
+15            android:name="app.nanumhr.pengawas.PengawasJaringanJob"
+15-->/Users/andrioeffendi/code/hr-app/mobile/modules/pengawas-jaringan/android/src/main/AndroidManifest.xml:9:7-62
+16            android:exported="false"
+16-->/Users/andrioeffendi/code/hr-app/mobile/modules/pengawas-jaringan/android/src/main/AndroidManifest.xml:11:7-31
+17            android:permission="android.permission.BIND_JOB_SERVICE" />
+17-->/Users/andrioeffendi/code/hr-app/mobile/modules/pengawas-jaringan/android/src/main/AndroidManifest.xml:10:7-63
+18    </application>
+19
+20</manifest>

@@ -1,0 +1,7 @@
+{
+  "name": "pengawas-jaringan",
+  "version": "1.0.0",
+  "description": "Pengawas koneksi yang selamat dari matinya proses",
+  "main": "index.ts",
+  "private": true
+}

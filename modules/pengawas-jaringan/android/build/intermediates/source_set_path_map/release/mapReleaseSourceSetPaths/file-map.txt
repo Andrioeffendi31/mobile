@@ -1,0 +1,7 @@
+app.nanumhr.pengawas.pengawas-jaringan-pngs-0 /Users/andrioeffendi/code/hr-app/mobile/modules/pengawas-jaringan/android/build/generated/res/pngs/release
+app.nanumhr.pengawas.pengawas-jaringan-resValues-1 /Users/andrioeffendi/code/hr-app/mobile/modules/pengawas-jaringan/android/build/generated/res/resValues/release
+app.nanumhr.pengawas.pengawas-jaringan-mergeReleaseResources-2 /Users/andrioeffendi/code/hr-app/mobile/modules/pengawas-jaringan/android/build/intermediates/incremental/release/mergeReleaseResources/merged.dir
+app.nanumhr.pengawas.pengawas-jaringan-mergeReleaseResources-3 /Users/andrioeffendi/code/hr-app/mobile/modules/pengawas-jaringan/android/build/intermediates/incremental/release/mergeReleaseResources/stripped.dir
+app.nanumhr.pengawas.pengawas-jaringan-release-4 /Users/andrioeffendi/code/hr-app/mobile/modules/pengawas-jaringan/android/build/intermediates/merged_res/release/mergeReleaseResources
+app.nanumhr.pengawas.pengawas-jaringan-main-5 /Users/andrioeffendi/code/hr-app/mobile/modules/pengawas-jaringan/android/src/main/res
+app.nanumhr.pengawas.pengawas-jaringan-release-6 /Users/andrioeffendi/code/hr-app/mobile/modules/pengawas-jaringan/android/src/release/res

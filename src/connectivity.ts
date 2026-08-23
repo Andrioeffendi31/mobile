@@ -2,6 +2,7 @@ import { AppState, Platform } from "react-native";
 import NetInfo, { type NetInfoState } from "@react-native-community/netinfo";
 import * as Notifications from "expo-notifications";
 import * as SecureStore from "expo-secure-store";
+import { pasangPengawas, tandaiPulihNative } from "../modules/pengawas-jaringan";
 
 const CHANNEL = "connectivity";
 const STATE_KEY = "nanumhr.connectivity-state";
@@ -209,9 +210,27 @@ export async function markInternetConnected(): Promise<boolean> {
     if (!state.offline) return false;
     await tulisState({ offline: false, sejak: null, notifiedAt: null });
     await Notifications.cancelScheduledNotificationAsync(NOTIF_ID).catch(() => {});
+    // Menyingkirkan notifikasi native maupun milik JS sekaligus: keduanya memakai
+    // tag "nanumhr-offline" + id 0 yang sama.
     await Notifications.dismissNotificationAsync(NOTIF_ID).catch(() => {});
+    // ...dan penanda episode milik Kotlin, supaya tik JobScheduler berikutnya tidak
+    // melanjutkan episode yang menurut JS sudah selesai.
+    tandaiPulihNative();
     return true;
   });
+}
+
+/**
+ * Apakah perubahan ini tepi putus → pulih?
+ *
+ * Murni supaya bisa di-assert tanpa NetInfo, dan supaya syaratnya tidak
+ * tersembunyi di dalam closure pemantau. `null` — NetInfo yang belum tahu
+ * jawabannya, keadaan yang biasa muncul tepat saat radio berpindah — bukan tepi:
+ * memperlakukannya sebagai pulih berarti mengirim ping susulan setiap kali sinyal
+ * berkedip.
+ */
+export function tepiPulih(terputus: boolean, isOffline: boolean | null): boolean {
+  return terputus && isOffline === false;
 }
 
 function offline(state: NetInfoState): boolean | null {
@@ -227,17 +246,55 @@ type ConnectivityCheck = {
 };
 
 export function startConnectivityMonitor(onReconnect?: () => void | Promise<void>) {
+  /**
+   * Sumber kebenaran "baru saja pulih" ada DI SINI, bukan di nilai balik
+   * `markInternetConnected()`.
+   *
+   * Fungsi itu mengembalikan `true` sekali saja per episode — tepi yang
+   * dipersistensi — sementara yang memanggilnya ada tiga, dan dua di antaranya
+   * (`jalankanFlush` dan `kirimAtauAntre` di background-ping) memanggil lalu
+   * MEMBUANG hasilnya. Satu ping yang kebetulan berhasil sedetik lebih dulu sudah
+   * menghabiskan tepinya, dan listener di bawah — satu-satunya yang butuh tepi itu
+   * sebagai PEMICU — melihat `false` lalu tidak melakukan apa pun. Itulah ping
+   * tertunda yang baru terkirim saat layarnya dibuka.
+   *
+   * Tepi lokal boleh berbunyi lebih sering; biayanya sudah dibatasi di hilir:
+   * `catchUpPing` punya lantai yang dipersistensi dan `flushQueue` tidak berbuat
+   * apa-apa saat antreannya kosong.
+   */
+  let terputus = false;
+  const nilai = (isOffline: boolean | null) => {
+    const pulih = tepiPulih(terputus, isOffline);
+    if (isOffline !== null) terputus = isOffline;
+    return pulih;
+  };
+
+  /**
+   * Penjaga kedua, di luar jangkauan matinya proses. Pemantau di bawah hanya hidup
+   * selama ada konteks JS; job native ini tidak. Ambangnya diturunkan dari konstanta
+   * yang sama supaya keduanya tidak pernah berselisih soal "sepuluh menit".
+   */
+  pasangPengawas(JEDA_OFFLINE_MENIT * 60);
+
   void checkConnectivityNow("listener").then((hasil) => {
-    if (hasil.recovered) void onReconnect?.();
+    // peluncuran dingin: keadaan awal disemai di sini, bukan diasumsikan online.
+    // `recovered` tetap ikut dibaca — checkConnectivityNow mengonsumsi tepi
+    // persistennya sendiri, jadi proses yang menyala kembali setelah lama offline
+    // tetap punya pemicu.
+    if (nilai(hasil.offline) || hasil.recovered) void onReconnect?.();
   });
 
   const net = NetInfo.addEventListener((state) => {
     void (async () => {
       const isOffline = offline(state);
+      const pulih = nilai(isOffline);
       if (isOffline === true) {
         await notifyInternetDisconnected("listener");
-      } else if (isOffline === false && (await markInternetConnected())) {
-        await onReconnect?.();
+      } else if (isOffline === false) {
+        // tetap dipanggil demi efek sampingnya — membatalkan notifikasi yang
+        // belum berbunyi. Hanya nilai baliknya yang berhenti dipercaya.
+        await markInternetConnected();
+        if (pulih) await onReconnect?.();
       }
     })();
   });
@@ -245,7 +302,7 @@ export function startConnectivityMonitor(onReconnect?: () => void | Promise<void
   const app = AppState.addEventListener("change", (state) => {
     if (state === "background" || state === "inactive") {
       void checkConnectivityNow("background").then((hasil) => {
-        if (hasil.recovered) void onReconnect?.();
+        if (nilai(hasil.offline) || hasil.recovered) void onReconnect?.();
       });
     }
   });
@@ -293,4 +350,13 @@ if (__DEV__) {
   // bukan angka negatif yang akan ditolak penjadwal
   eq(detikTunda(T0, menit(12)), 1, "sudah lewat ambang");
   eq(detikTunda(T0, menit(600)), 1, "jauh melewati ambang");
+
+  const bool = (got: boolean, want: boolean, apa: string) => {
+    if (got !== want) throw new Error(`tepiPulih ${apa}: ${got} \u2260 ${want}`);
+  };
+  bool(tepiPulih(true, false), true, "putus lalu pulih");
+  bool(tepiPulih(false, false), false, "online terus, bukan tepi");
+  bool(tepiPulih(true, true), false, "masih putus");
+  // NetInfo yang belum tahu jawabannya tidak boleh dihitung sebagai pulih
+  bool(tepiPulih(true, null), false, "keadaan belum diketahui");
 }

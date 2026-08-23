@@ -765,6 +765,31 @@ export function ensureConnectivityMonitor() {
 
 ensureConnectivityMonitor();
 
+/**
+ * Watchdog dipasang ulang dari MODULE SCOPE, alasannya sama persis dengan
+ * pemantau koneksi di atas: satu-satunya pemanggil lain ada di dalam efek
+ * `_layout.tsx`, dan efek itu butuh pohon React yang ter-mount — hal yang justru
+ * TIDAK ada pada peluncuran headless.
+ *
+ * Kenapa tidak cukup sekali seumur pemasangan: di Android O+ rantainya
+ * `OneTimeWorkRequest` yang mengantrekan penggantinya sendiri di akhir tiap
+ * jalannya. Satu mata rantai yang putus — task yang belum terdefinisi, WorkManager
+ * yang dibersihkan sistem — tidak pernah tersambung lagi sampai ada yang membuka
+ * aplikasinya. Ini yang menyambungnya di tiap peluncuran, termasuk yang tanpa
+ * layar.
+ *
+ * Digerbangi cookie, bukan tanpa syarat: logout memanggil `stopBackgroundWatchdog`,
+ * dan menyalakannya lagi di tiap peluncuran berarti menghidupkan kembali apa yang
+ * baru saja dimatikan. Sesudah logout SESSION_KEY sudah tidak ada, jadi cabang ini
+ * diam. `isTaskRegisteredAsync` di dalam ensureBackgroundWatchdog yang membuat
+ * pemanggilan berulang ini murah.
+ */
+void SecureStore.getItemAsync(SESSION_KEY)
+  .then((cookie) => (cookie ? ensureBackgroundWatchdog() : false))
+  .catch((error) =>
+    console.warn("[ping] watchdog gagal dipasang ulang", (error as Error).message),
+  );
+
 if (__DEV__) {
   const yakin = (got: string | null, want: string | null, apa: string) => {
     if (got !== want) throw new Error(`masukTersimpan ${apa}: ${got} ≠ ${want}`);

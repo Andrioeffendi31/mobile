@@ -18,6 +18,7 @@ import {
   catchUpPing,
   clearQueue,
   ensureBackgroundWatchdog,
+  ensureConnectivityMonitor,
   masukTerakhir,
   startBackgroundPing,
   stopBackgroundPing,
@@ -31,6 +32,7 @@ import "@tamagui/native/setup-expo-linear-gradient";
 import { ApiError, type Bootstrap, get, useSession } from "@/api";
 import { IzinLokasi, useIzinLokasi } from "@/izin-lokasi";
 import { IzinNotifikasi } from "@/izin-notifikasi";
+import { lepasPengawas } from "../../modules/pengawas-jaringan";
 import { usePrefs } from "@/prefs";
 import { dark, light, tamaguiConfig } from "../../tamagui.config";
 
@@ -359,6 +361,12 @@ function Trail({ cookie }: { cookie: string | null }) {
   }, [clockedIn, cookie, me.data, me.isError, me.data?.today.clockIn, bolehLokasi]);
 
   useEffect(() => {
+    // Kesempatan kedua, bukan pengulangan berkala: pemasangan di module scope bisa
+    // gagal kalau modul native NetInfo belum siap saat bundelnya dievaluasi — dan
+    // tidak ada apa pun yang datang menagihnya lagi, jadi satu kegagalan mematikan
+    // deteksi koneksi seumur proses. Di sini semuanya sudah pasti siap, dan
+    // panggilan kedua atas pemasangan yang sudah berhasil tidak berbuat apa-apa.
+    ensureConnectivityMonitor();
     // Logout must stop tracking immediately. Signed-in reconciliation is not
     // needed for first paint, so leave the JS/native bridge quiet until Beranda
     // has settled.
@@ -366,6 +374,9 @@ function Trail({ cookie }: { cookie: string | null }) {
       void stopBackgroundWatchdog().catch((error) =>
         console.warn("[ping] gagal menghentikan watchdog", (error as Error).message),
       );
+      // Telepon yang sudah tidak dipakai siapa pun tidak perlu mengabari soal
+      // koneksi. Dinyalakan lagi oleh startConnectivityMonitor saat ada yang masuk.
+      lepasPengawas();
       void rukun().catch((error) =>
         console.warn("[ping] gagal menghentikan pelacakan", (error as Error).message),
       );
