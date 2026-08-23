@@ -1,9 +1,15 @@
-import { useEffect, useState } from "react";
-import { Image } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { FlatList, Image, type LayoutChangeEvent } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { Paragraph, Text, XStack, YStack, useTheme } from "tamagui";
-import { API, type Announcements, type Bootstrap, get, useSession } from "@/api";
+import {
+  API,
+  type Announcements,
+  type Bootstrap,
+  get,
+  useSession,
+} from "@/api";
 import { cat, GRAD, tint } from "@/theme";
 import {
   Badge,
@@ -16,6 +22,8 @@ import {
 } from "@/ui";
 
 type Item = Announcements["items"][number];
+/** jarak antar kartu carousel; ikut dihitung ke snapToInterval */
+const JEDA_KARTU = 12;
 type Preview = Bootstrap["announcements"][number];
 
 /**
@@ -33,17 +41,36 @@ export function Pengumuman({ preview }: { preview: Preview[] }) {
   // dropping the item on close would empty the frame while it is still sliding
   const [detail, setDetail] = useState<Item | null>(null);
   const [open, setOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
   const q = useQuery({
     queryKey: ["announcements"],
-    queryFn: ({ signal }) => get<Announcements>("/api/me/announcements", { signal }),
-    // /api/me already carries the two rows needed by the Home preview. Fetch the
-    // 50-row body feed only when somebody asks to read or expand it.
-    enabled: false,
+    queryFn: ({ signal }) =>
+      get<Announcements>("/api/me/announcements", { signal }),
+    /**
+     * Dulu `false`: /api/me sudah membawa dua baris untuk pratinjau Beranda, dan
+     * umpan 50 barisnya hanya diambil kalau ada yang memintanya.
+     *
+     * Carousel mengubah syaratnya. Dua kartu bukan carousel, dan bannernya
+     * memang barang yang datang dari umpan itu. Jadi ia diambil sekali saat
+     * kartunya ter-mount — pratinjau bootstrap tetap yang mengecat lebih dulu,
+     * jadi tidak ada layar kosong yang menunggu jaringan.
+     */
+    enabled: true,
   });
+
+  const [lebar, setLebar] = useState(0);
+  const [aktif, setAktif] = useState(0);
+  const ukur = useCallback((e: LayoutChangeEvent) => {
+    setLebar(e.nativeEvent.layout.width);
+  }, []);
 
   const items: (Item | Preview)[] = q.data?.items ?? preview;
 
+  /**
+   * Isi lengkapnya — badan pengumuman dan bannernya — hanya ada di umpan, bukan
+   * di pratinjau bootstrap. Umpannya sudah diambil saat kartunya ter-mount, tapi
+   * ketukan bisa datang lebih cepat daripada jaringannya, jadi jalur ini tetap
+   * menunggu alih-alih membuka lembar yang isinya separuh.
+   */
   const loadAll = async () => {
     if (q.data) return q.data.items;
     const result = await q.refetch();
@@ -58,46 +85,25 @@ export function Pengumuman({ preview }: { preview: Preview[] }) {
   };
 
   return (
-    // Satu kartu yang memuat judul dan preview pertama, seperti rancangan Home.
-    // "Lihat semua" membuka sisanya inline karena belum ada layar daftar khusus.
+    // Satu kartu berisi carousel pengumuman: banner, judul, dan metanya. Isi
+    // lengkapnya satu ketukan lagi, di lembar detail.
     <Card padding={18} gap={14} borderRadius={28}>
       <XStack alignItems="center" justifyContent="space-between" gap={10}>
         <Text fontSize={16.5} fontWeight="700" color="$fg">
           Pengumuman
         </Text>
-        <XStack
-          alignItems="center"
-          gap={4}
-          backgroundColor="$accentSubtle"
-          borderRadius={16}
-          paddingHorizontal={11}
-          paddingVertical={7}
-          onPress={() => {
-            if (expanded) {
-              setExpanded(false);
-              return;
-            }
-            void loadAll().then((loaded) => {
-              if (loaded.length) setExpanded(true);
-            });
-          }}
-          pressStyle={{ opacity: 0.7, scale: 0.98 }}
-          accessibilityRole="button"
-          aria-label={expanded ? "Ringkas pengumuman" : "Lihat semua pengumuman"}
-        >
-          <Text fontSize={11.5} fontWeight="600" color="$accent">
-            {expanded ? "Ringkas" : "Lihat semua"}
+        {/* Tidak ada lagi "Lihat semua": semuanya bisa dicapai dengan menggeser
+            carousel di bawah, dan tombol yang membuka apa yang sudah terbuka
+            hanya menambah satu hal untuk dipahami. */}
+        {items.length > 1 ? (
+          <Text fontSize={11.5} color="$fgSubtle">
+            {aktif + 1}/{items.length}
           </Text>
-          <Feather
-            name={expanded ? "chevron-up" : "chevron-right"}
-            size={14}
-            color={theme.accent?.val}
-          />
-        </XStack>
+        ) : null}
       </XStack>
 
       {q.isFetching && items.length === 0 ? (
-        <SkeletonRows count={3} lead={32} trail={false} />
+        <SkeletonRows count={2} lead={32} trail={false} />
       ) : q.isError && items.length === 0 ? (
         // the Beranda already reports a failed bootstrap loudly; a second red
         // panel for the feed would bury the rest of the screen
@@ -114,7 +120,13 @@ export function Pengumuman({ preview }: { preview: Preview[] }) {
           borderRadius={22}
           backgroundColor="$surface2"
         >
-          <IconTile icon="bell" fg="#fff" grad={GRAD.ungu} size={50} radius={17} />
+          <IconTile
+            icon="bell"
+            fg="#fff"
+            grad={GRAD.ungu}
+            size={50}
+            radius={17}
+          />
           <YStack flex={1} gap={3}>
             <Text fontSize={13.5} fontWeight="600" color="$fg">
               Belum ada pengumuman
@@ -125,53 +137,143 @@ export function Pengumuman({ preview }: { preview: Preview[] }) {
           </YStack>
         </XStack>
       ) : (
-        (expanded ? items : items.slice(0, 1)).map((a) => {
-          const tone = cat(a.category);
-          return (
-            <XStack
-              key={a.id}
-              alignItems="center"
-              gap={12}
-              padding={14}
-              borderRadius={20}
-              backgroundColor="$surface2"
-              borderWidth={1}
-              borderColor={"pinned" in a && a.pinned ? "$accentLine" : "transparent"}
-              pressStyle={{ backgroundColor: "$inset" }}
-              onPress={() => void openDetail(a.id)}
-              accessibilityRole="button"
-              aria-label={`${a.title}. ${a.date}. ${a.category}. Buka detail`}
-            >
-              <YStack
-                width={44}
-                height={44}
-                borderRadius={15}
-                backgroundColor={tone.bg}
-                alignItems="center"
-                justifyContent="center"
-                flexShrink={0}
-              >
-                <Feather name="volume-2" size={19} color={tint(tone.fg)} />
-              </YStack>
-              <YStack flex={1} gap={3}>
-                <Text fontSize={13.5} fontWeight="600" color="$fg">
-                  {a.title}
-                </Text>
-                <Text fontSize={11.5} lineHeight={16} color="$fgSubtle">
-                  {a.date} · {a.category}
-                </Text>
-              </YStack>
-              {"pinned" in a && a.pinned ? (
-                <Badge label="Penting" fg="$warning" bg="$warningSubtle" />
+        /**
+         * Lebarnya diukur, bukan dihitung dari lebar layar: kartu ini punya
+         * padding sendiri dan bisa dipakai ulang di tempat lain, jadi menebak
+         * `Dimensions.get()` dikurangi angka-angka yang dihafal akan meleset
+         * begitu paddingnya berubah.
+         */
+        <YStack onLayout={ukur}>
+          {lebar > 0 ? (
+            <>
+              <FlatList
+                data={items}
+                keyExtractor={(a) => String(a.id)}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                decelerationRate="fast"
+                // satu kartu penuh per geseran, bukan bebas berhenti di tengah
+                snapToInterval={lebar + JEDA_KARTU}
+                snapToAlignment="start"
+                onMomentumScrollEnd={(e) =>
+                  setAktif(
+                    Math.round(
+                      e.nativeEvent.contentOffset.x / (lebar + JEDA_KARTU),
+                    ),
+                  )
+                }
+                ItemSeparatorComponent={() => <YStack width={JEDA_KARTU} />}
+                renderItem={({ item: a }) => (
+                  <KartuPengumuman
+                    a={a}
+                    lebar={lebar}
+                    onPress={() => void openDetail(a.id)}
+                  />
+                )}
+              />
+              {items.length > 1 ? (
+                <XStack
+                  alignSelf="center"
+                  gap={6}
+                  marginTop={12}
+                  accessibilityRole="progressbar"
+                  aria-label={`Pengumuman ${aktif + 1} dari ${items.length}`}
+                >
+                  {items.map((a, n) => (
+                    <YStack
+                      key={a.id}
+                      width={n === aktif ? 18 : 6}
+                      height={6}
+                      borderRadius={3}
+                      backgroundColor={n === aktif ? "$accent" : "$lineStrong"}
+                    />
+                  ))}
+                </XStack>
               ) : null}
-              <Feather name="chevron-right" size={15} color={theme.fgSubtle?.val} />
-            </XStack>
-          );
-        })
+            </>
+          ) : null}
+        </YStack>
       )}
 
       <Detail item={detail} open={open} onClose={() => setOpen(false)} />
     </Card>
+  );
+}
+
+/**
+ * Satu kartu carousel: banner di atas, judul dan metanya di bawah.
+ *
+ * Pengumuman TANPA banner tetap mendapat kartu setinggi yang sama, dengan petak
+ * berwarna kategori sebagai ganti gambarnya — kalau tidak, carousel yang isinya
+ * campur akan naik-turun tingginya tiap kali digeser.
+ *
+ * Bannernya `cover` di sini, bukan `contain` seperti di lembar detail: petaknya
+ * pratinjau berukuran tetap, dan yang dicari mata saat menggeser adalah warna
+ * dan bentuk, bukan gambar utuhnya. Yang utuh ada satu ketukan lagi.
+ */
+function KartuPengumuman({
+  a,
+  lebar,
+  onPress,
+}: {
+  a: Item | Preview;
+  lebar: number;
+  onPress: () => void;
+}) {
+  const tone = cat(a.category);
+  const cookie = useSession((st) => st.cookie);
+  const disematkan = "pinned" in a && a.pinned;
+
+  return (
+    <YStack
+      width={lebar}
+      borderRadius={22}
+      overflow="hidden"
+      backgroundColor="$surface2"
+      borderWidth={1}
+      borderColor={disematkan ? "$accentLine" : "transparent"}
+      pressStyle={{ opacity: 0.85 }}
+      onPress={onPress}
+      accessibilityRole="button"
+      aria-label={`${a.title}. ${a.date}. ${a.category}. Buka detail`}
+    >
+      {a.bannerKey ? (
+        <Image
+          source={{
+            uri: `${API}/api/files/${a.bannerKey}`,
+            ...(cookie ? { headers: { cookie } } : {}),
+          }}
+          style={{ width: "100%", aspectRatio: 16 / 9 }}
+          resizeMode="cover"
+          accessibilityLabel={`Banner ${a.title}`}
+        />
+      ) : (
+        <YStack
+          width="100%"
+          aspectRatio={16 / 9}
+          backgroundColor={tone.bg}
+          alignItems="center"
+          justifyContent="center"
+        >
+          <Feather name="volume-2" size={30} color={tint(tone.fg)} />
+        </YStack>
+      )}
+
+      <YStack padding={14} gap={6}>
+        <XStack alignItems="center" gap={7} flexWrap="wrap">
+          <Badge label={a.category} fg={tone.fg} bg={tone.bg} />
+          {disematkan ? (
+            <Badge label="Penting" fg="$warning" bg="$warningSubtle" />
+          ) : null}
+        </XStack>
+        <Text fontSize={14} fontWeight="700" color="$fg" numberOfLines={2}>
+          {a.title}
+        </Text>
+        <Text fontSize={11.5} color="$fgSubtle">
+          {a.date}
+        </Text>
+      </YStack>
+    </YStack>
   );
 }
 
@@ -220,7 +322,9 @@ function Detail({
         <>
           <XStack alignItems="center" gap={7} flexWrap="wrap">
             <Badge label={item.category} fg={tone.fg} bg={tone.bg} />
-            {item.pinned ? <Badge label="Penting" fg="$warning" bg="$warningSubtle" /> : null}
+            {item.pinned ? (
+              <Badge label="Penting" fg="$warning" bg="$warningSubtle" />
+            ) : null}
             <Text fontSize={11.5} color="$fgSubtle">
               {item.author} · {item.date}
             </Text>

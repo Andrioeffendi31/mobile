@@ -296,7 +296,14 @@ export type Bootstrap = {
   /** credential ids of this account's passkeys, across all devices — the phone
    *  intersects them with the ones it created to tell "this device" apart */
   passkeys: string[];
-  announcements: { id: number; title: string; category: string; date: string }[];
+  announcements: {
+    id: number;
+    title: string;
+    category: string;
+    date: string;
+    /** kunci objek banner; null kalau pengumumannya tanpa gambar */
+    bannerKey: string | null;
+  }[];
   team: {
     total: number;
     present: number;
