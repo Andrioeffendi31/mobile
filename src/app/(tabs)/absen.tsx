@@ -90,6 +90,9 @@ export default function Absen() {
   const [officeId, setOfficeId] = useState<number | null>(null);
   const [picker, setPicker] = useState(false);
   const [alasan, setAlasan] = useState("");
+  /** terpisah dari `alasan`: pulang cepat dan di luar kantor bisa terjadi
+   *  bersamaan, dan keduanya disimpan di kolom yang berbeda */
+  const [alasanLuar, setAlasanLuar] = useState("");
   /**
    * Jam WIB yang dipakai untuk memutuskan apakah alasannya wajib. Dibaca ulang
    * tiap 30 detik selama layarnya dilihat, bukan sekali saat dibuka: tanpa itu,
@@ -250,6 +253,18 @@ export default function Absen() {
   const perluAlasan = telatSekarang || cepatSekarang;
   const alasanKurang = perluAlasan && alasan.trim().length < 5;
 
+  /**
+   * Absen keluar dari luar radius kantornya.
+   *
+   * Dulu keadaan ini buntu: satu-satunya jalan yang ditawarkan layar ini adalah
+   * sakelar WFH, padahal pada absen keluar server mengabaikan field itu dan
+   * mengukur terhadap kantor yang dipilih saat absen masuk — tombolnya menyala,
+   * lalu permintaannya tetap ditolak 400. Sekarang jalannya alasan, dan server
+   * menerimanya.
+   */
+  const luarSekarang = action === "out" && Boolean(fix) && !inside;
+  const alasanLuarKurang = luarSekarang && alasanLuar.trim().length < 5;
+
   // kembali ke Beranda, bukan router.back() — lihat useTabBack di ui.tsx
   const close = useTabBack("/");
 
@@ -272,6 +287,7 @@ export default function Absen() {
       if (perluAlasan) {
         form.append(telatSekarang ? "lateReason" : "earlyReason", alasan.trim());
       }
+      if (luarSekarang) form.append("awayReason", alasanLuar.trim());
       if (selfie) {
         // React Native's FormData takes {uri,name,type} for a file part; there is
         // no File to read the bytes into, and reading them would double memory
@@ -338,6 +354,7 @@ export default function Absen() {
         setOfficeId(null);
         setPicker(false);
         setAlasan("");
+        setAlasanLuar("");
         picked.current = false;
         // clears the failure note too: a rejected punch must not greet the next visit
         resetSubmit();
@@ -348,7 +365,14 @@ export default function Absen() {
   /** the selfie counts here now: the server rejects a punch without one, so the
    *  button must not offer to send what cannot be accepted */
   const blocked =
-    !fix || !selfie || (!inside && !wfh) || alasanKurang || submit.isPending || preparing;
+    !fix ||
+    !selfie ||
+    // hanya absen MASUK yang dihalangi pagar; keluarnya dihalangi alasannya
+    (action === "in" && !inside && !wfh) ||
+    alasanKurang ||
+    alasanLuarKurang ||
+    submit.isPending ||
+    preparing;
 
   // a cold deep link can land here before /api/me has answered — without this the
   // screen would flash "gagal memuat" at a request that is still in flight
@@ -497,7 +521,37 @@ export default function Absen() {
          * choosing", the explanation sits above it in warning tone, and the whole
          * thing is one card: reason on top, decision at the bottom.
          */}
-        {fix && !inside ? (
+        {luarSekarang ? (
+          /**
+           * Absen KELUAR di luar radius: alasan, bukan sakelar.
+           *
+           * Sakelar WFH tidak pernah cocok di sini — harinya sudah terlanjur
+           * tercatat sebagai hari kantor oleh absen masuknya, dan server pun
+           * mengabaikan field `wfh` pada absen keluar. Menawarkannya berarti
+           * menawarkan tombol yang menyala lalu ditolak 400.
+           */
+          <Card gap={11}>
+            <XStack gap={10} alignItems="flex-start">
+              <Feather name="map-pin" size={15} color={tint("$warning")} />
+              <Text fontSize={12.5} color="$warning" lineHeight={18} flex={1}>
+                {chosen
+                  ? `Anda ${formatJarak(meter!)} dari ${chosen.name}, di luar radius ${chosen.radiusM} m. Alasan wajib diisi dan akan ditinjau admin.`
+                  : "Anda di luar titik absen hari ini. Alasan wajib diisi dan akan ditinjau admin."}
+              </Text>
+            </XStack>
+            <Field label="Alasan absen keluar di luar kantor">
+              <TextArea
+                value={alasanLuar}
+                onChangeText={setAlasanLuar}
+                placeholder="Mis. dinas ke klien, langsung pulang dari sana…"
+                multiline
+                maxLength={500}
+              />
+            </Field>
+          </Card>
+        ) : null}
+
+        {fix && !inside && action === "in" ? (
           <Card padding={0} overflow="hidden" borderColor={wfh ? "$accentLine" : "$line"}>
             <XStack
               backgroundColor="$warningSubtle"
@@ -583,11 +637,13 @@ export default function Absen() {
               ? "Foto selfie wajib untuk absen"
               : !fix
                 ? "Menunggu verifikasi lokasi"
-                : !inside && !wfh
+                : action === "in" && !inside && !wfh
                   ? "Tandai WFH untuk melanjutkan dari luar radius"
-                  : alasanKurang
-                    ? `Isi alasan ${telatSekarang ? "keterlambatan" : "pulang cepat"} minimal 5 karakter`
-                    : "Lokasi dan foto siap dikirim"}
+                  : alasanLuarKurang
+                    ? "Isi alasan absen keluar di luar kantor minimal 5 karakter"
+                    : alasanKurang
+                      ? `Isi alasan ${telatSekarang ? "keterlambatan" : "pulang cepat"} minimal 5 karakter`
+                      : "Lokasi dan foto siap dikirim"}
         </Text>
       </YStack>
 
