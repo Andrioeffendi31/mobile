@@ -35,6 +35,7 @@ import { IzinNotifikasi } from "@/izin-notifikasi";
 import { lepasPengawas } from "../../modules/pengawas-jaringan";
 import { usePrefs } from "@/prefs";
 import { dark, light, tamaguiConfig } from "../../tamagui.config";
+import { backfillNamaTempat } from "@/backfill-tempat";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -397,6 +398,31 @@ function Trail({ cookie }: { cookie: string | null }) {
   }, [cookie, me.data, me.isError, rukun]);
 
   /**
+   * Menyusulkan nama tempat untuk ping yang lahir tanpa nama.
+   *
+   * DI SINI, di dalam pohon React, karena hanya di sinilah aplikasi dipastikan
+   * berada di depan — dan geocoder Android baru hidup pada keadaan itu
+   * (expo-location mematikannya saat aplikasi ke latar belakang). Menjalankannya
+   * dari background-ping tidak akan pernah berhasil.
+   *
+   * Ditunda sedikit dan tidak pernah dilaporkan ke pengguna: ini pekerjaan
+   * kosmetik yang tidak boleh bersaing dengan hal-hal yang dilihat orang saat
+   * membuka aplikasi, dan yang gagal cukup dicoba lagi lain kali.
+   */
+  const susulNamaTempat = useCallback(() => {
+    if (!cookie) return;
+    setTimeout(() => {
+      void backfillNamaTempat().catch((error) =>
+        console.warn("[tempat] gagal menyusulkan nama", (error as Error).message),
+      );
+    }, 2_500);
+  }, [cookie]);
+
+  useEffect(() => {
+    susulNamaTempat();
+  }, [susulNamaTempat]);
+
+  /**
    * Kembali ke depan adalah satu-satunya pemulihan yang tersedia setelah
    * force-stop: Android menaruh paket yang dihentikan paksa dalam keadaan
    * *stopped* dan tidak mengirimkan broadcast apa pun ke sana — termasuk
@@ -410,9 +436,11 @@ function Trail({ cookie }: { cookie: string | null }) {
       // The fresh query drives the reconciliation effect. Calling `rukun` here
       // too used stale attendance state and duplicated location work whenever a
       // camera/settings activity returned to the app.
+      susulNamaTempat();
     });
     return () => sub.remove();
-  }, [cookie, qc]);
+  }, [cookie, qc, susulNamaTempat]);
+
 
   return null;
 }
