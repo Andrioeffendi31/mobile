@@ -426,6 +426,40 @@ export type Team = {
   }[];
 };
 
+/**
+ * Papan peringkat kehadiran. Poin dan peringkatnya dihitung SERVER — bobotnya
+ * kebijakan perusahaan, dan aplikasi yang sudah terpasang di ponsel orang tidak
+ * boleh menjadi tempat aturan itu tersimpan.
+ */
+export type LeaderboardRow = {
+  id: number;
+  name: string;
+  division: string | null;
+  photoKey: string | null;
+  initials: string;
+  rank: number;
+  poin: number;
+  /** hari hadir tanpa terlambat pada periode itu */
+  tepatWaktu: number;
+  telat: number;
+  alpa: number;
+  /** hari kerja orang itu pada periode itu — penyebutnya */
+  hari: number;
+};
+
+export type Leaderboard = {
+  period: "week" | "month" | "all";
+  dari: string;
+  sampai: string;
+  hariKerja: number;
+  /** ringkasan kehadiran seluruh karyawan HARI INI, termasuk pimpinan */
+  hariIni: { hadir: number; telat: number; izin: number; belum: number };
+  /** null kalau pemanggil tidak diperingkat */
+  me: LeaderboardRow | null;
+  peringkatDari: number;
+  leaders: LeaderboardRow[];
+};
+
 export type Announcements = {
   items: {
     id: number;

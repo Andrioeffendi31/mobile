@@ -1,388 +1,555 @@
-import { useCallback, useMemo, useState } from "react";
-import { FlatList, RefreshControl } from "react-native";
+import { useCallback, useState } from "react";
+import { Image, RefreshControl, type ImageSourcePropType } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { useFocusEffect, useIsFocused } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScrollView, Text, XStack, YStack, useTheme } from "tamagui";
-import { type Team, get } from "@/api";
-import { tanggalPanjang } from "@/format";
+import { type Leaderboard, type LeaderboardRow, get } from "@/api";
 import {
-  AttBadge,
   Avatar,
-  Card,
   Empty,
   ErrorNote,
-  Input,
   Mono,
-  PageIntro,
-  StickyHeader,
   Screen,
   Skeleton,
+  StickyHeader,
   useStickyHeader,
 } from "@/ui";
 
-const FILTERS = [
-  { value: "all", label: "Semua" },
-  { value: "hadir", label: "Hadir" },
-  { value: "telat", label: "Terlambat" },
-  { value: "izin", label: "Cuti / izin" },
-  { value: "belum", label: "Belum absen" },
-] as const;
+type Period = Leaderboard["period"];
 
-type Filter = (typeof FILTERS)[number]["value"];
+const PERIODS: { value: Period; label: string; sub: string }[] = [
+  { value: "week", label: "Mingguan", sub: "Lihat pencapaian terbaik minggu ini." },
+  { value: "month", label: "Bulanan", sub: "Lihat pencapaian terbaik bulan ini." },
+  { value: "all", label: "Semua", sub: "Pencapaian sejak aplikasi mulai mencatat." },
+];
 
-/** Which filter chip a status belongs under — same grouping as the mockup. */
-const group = (status: string): Filter =>
-  status === "hadir" || status === "wfh"
-    ? "hadir"
-    : status === "telat"
-      ? "telat"
-      : status === "libur" || status === "belum_dicatat"
-        ? // hari yang tidak dinilai bukan urusan tindak lanjut; ember "izin" adalah
-          // tempat terdekat yang ada di rail filter layar ini
-          "izin"
-        : status === "belum_absen" || status === "tanpa_keterangan"
-        ? "belum"
-        : // "libur" ikut ember izin, bukan "belum": hari libur divisinya bukan
-          // sesuatu yang perlu ditindaklanjuti siapa pun
-          "izin";
+const CROWN = require("../../../assets/leaderboard/crown.png");
+const SPRINKLES = require("../../../assets/leaderboard/sprinkles.png");
+const MEDALS: Record<1 | 2 | 3, ImageSourcePropType> = {
+  1: require("../../../assets/leaderboard/medal-gold.png"),
+  2: require("../../../assets/leaderboard/medal-silver.png"),
+  3: require("../../../assets/leaderboard/medal-bronze.png"),
+};
+
+const POINT_FORMAT = new Intl.NumberFormat("id-ID");
 
 /**
- * "Kehadiran Tim" (PRD-Mobile §6.4). Search and filter run on the phone: the
- * whole company is one short list, so filtering locally beats a request per
- * keystroke.
+ * Papan peringkat kehadiran.
+ *
+ * Angkanya datang dari /api/me/leaderboard, yang menghitungnya dengan
+ * `rekapSql()` yang sama dengan Rekap Kehadiran di konsol web — bukan kueri
+ * kedua yang kebetulan mirip. Papan peringkat yang angkanya berbeda dari
+ * laporan resmi akan membuat orang memperdebatkan peringkatnya, bukan
+ * kehadirannya.
+ *
+ * Poin TIDAK dihitung di sini: bobotnya kebijakan perusahaan, dan aplikasi yang
+ * sudah terpasang di ponsel orang bukan tempat menyimpan aturan yang bisa
+ * berubah.
  */
 export default function Tim() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const theme = useTheme();
-  const isFocused = useIsFocused();
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
-  const [refreshing, setRefreshing] = useState(false);
-
-  // same rule as Kehadiran: a search typed last visit would hide half the team
-  // from somebody who came back expecting the list
-  useFocusEffect(
-    useCallback(
-      () => () => {
-        setQuery("");
-        setFilter("all");
-      },
-      [],
-    ),
-  );
+  const [period, setPeriod] = useState<Period>("week");
+  const bar = useStickyHeader(72);
 
   const q = useQuery({
-    queryKey: ["team"],
-    queryFn: ({ signal }) => get<Team>("/api/me/team", { signal }),
-    enabled: isFocused,
+    queryKey: ["leaderboard", period],
+    queryFn: ({ signal }) =>
+      get<Leaderboard>(`/api/me/leaderboard?period=${period}`, { signal }),
   });
 
-  const refresh = async () => {
-    if (refreshing) return;
-    setRefreshing(true);
-    try {
-      await q.refetch();
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const members = q.data?.members ?? [];
-  const visible = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return members.filter(
-      (m) =>
-        (!needle || m.name.toLowerCase().includes(needle)) &&
-        (filter === "all" || group(m.status) === filter),
-    );
-  }, [members, query, filter]);
-
-  const summary = useMemo(
-    () =>
-      members.reduce(
-        (result, member) => {
-          const memberGroup = group(member.status);
-          if (memberGroup === "hadir" || memberGroup === "telat") result.present += 1;
-          if (memberGroup === "belum") result.absent += 1;
-          if (memberGroup === "izin") result.excused += 1;
-          return result;
-        },
-        { present: 0, absent: 0, excused: 0 },
-      ),
-    [members],
+  // kembali ke tab ini sesudah absen: peringkatnya harus sudah ikut berubah
+  useFocusEffect(
+    useCallback(() => {
+      void q.refetch();
+    }, [q.refetch]),
   );
-  const progress = members.length ? Math.round((summary.present / members.length) * 100) : 0;
 
-  // strip buram di bawah status bar + judul kecil, muncul saat digulirkan
-  const bar = useStickyHeader();
+  const ranked = q.data?.leaders ?? [];
+  const current = q.data?.me ?? null;
+  /**
+   * Podium: [kedua, pertama, ketiga] — juara di tengah dan paling tinggi.
+   * `filter(Boolean)` bukan hiasan: perusahaan yang baru mulai bisa punya
+   * kurang dari tiga orang berperingkat, dan mengakses `ranked[2]` yang
+   * undefined akan mengosongkan seluruh layar.
+   */
+  const top = [ranked[1], ranked[0], ranked[2]].filter(
+    (x): x is LeaderboardRow => Boolean(x),
+  );
+  const hariIni = q.data?.hariIni;
+  const sub = PERIODS.find((p) => p.value === period)!.sub;
 
   return (
-    <Screen>
-      <FlatList
+    <Screen backgroundColor="$surface">
+      <ScrollView
         onScroll={bar.onScroll}
         scrollEventThrottle={bar.scrollEventThrottle}
-        data={q.isPending || q.isError ? [] : visible}
-        keyExtractor={(member) => String(member.id)}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
-        }
-        contentContainerStyle={{ paddingHorizontal: 18, paddingTop: insets.top + 18, paddingBottom: 28 }}
-        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        initialNumToRender={9}
-        maxToRenderPerBatch={8}
-        windowSize={7}
-        removeClippedSubviews
-        ListHeaderComponent={
-          <YStack gap={14} paddingBottom={11}>
-            <PageIntro
-              title="Kehadiran tim"
-              subtitle={q.data ? tanggalPanjang(q.data.date) : "Memuat data hari ini"}
-            />
-
-            <Card
-              borderRadius={28}
-              padding={18}
-              gap={17}
-              overflow="hidden"
-              backgroundColor="$surface"
-            >
-              <YStack
-                position="absolute"
-                width={136}
-                height={136}
-                borderRadius={68}
-                backgroundColor="$accentSubtle"
-                right={-38}
-                top={-52}
-                opacity={0.7}
-                pointerEvents="none"
-              />
-              <XStack alignItems="center" justifyContent="space-between" gap={16}>
-                <YStack flex={1} gap={4}>
-                  <Text fontSize={12.5} fontWeight="500" color="$fgMuted">
-                    Sudah absen masuk
-                  </Text>
-                  <XStack alignItems="baseline" gap={6}>
-                    <Mono fontSize={32} lineHeight={38} fontWeight="700" color="$fg">
-                      {summary.present}
-                    </Mono>
-                    <Text fontSize={14} fontWeight="500" color="$fgSubtle">
-                      dari {members.length} rekan
-                    </Text>
-                  </XStack>
-                </YStack>
-                <YStack
-                  width={58}
-                  height={58}
-                  borderRadius={20}
-                  alignItems="center"
-                  justifyContent="center"
-                  backgroundColor="$accentSubtle"
-                >
-                  <Feather name="users" size={25} color={theme.accent?.val} />
-                </YStack>
-              </XStack>
-
-              <YStack height={8} borderRadius={4} backgroundColor="$inset" overflow="hidden">
-                <YStack
-                  height="100%"
-                  width={`${progress}%`}
-                  minWidth={progress ? 8 : 0}
-                  borderRadius={4}
-                  backgroundColor="$accentFill"
-                />
-              </YStack>
-
-              <XStack gap={8}>
-                <Summary label="Hadir" value={summary.present} tone="$success" />
-                <Summary label="Belum" value={summary.absent} tone="$warning" />
-                <Summary label="Izin / libur" value={summary.excused} tone="$info" />
-              </XStack>
-            </Card>
-
-            <YStack gap={11}>
-              <XStack
-                height={52}
-                alignItems="center"
-                borderRadius={19}
-                backgroundColor="$surface"
-                borderWidth={1}
-                borderColor="$line"
-                paddingHorizontal={15}
-                gap={11}
-              >
-                <Feather name="search" size={19} color={theme.fgSubtle?.val} />
-                <Input
-                  flex={1}
-                  height={48}
-                  paddingHorizontal={0}
-                  borderWidth={0}
-                  backgroundColor="transparent"
-                  value={query}
-                  onChangeText={setQuery}
-                  placeholder="Cari nama rekan"
-                  autoCapitalize="none"
-                  returnKeyType="search"
-                />
-                {query ? (
-                  <YStack
-                    width={30}
-                    height={30}
-                    borderRadius={15}
-                    alignItems="center"
-                    justifyContent="center"
-                    backgroundColor="$inset"
-                    onPress={() => setQuery("")}
-                    pressStyle={{ opacity: 0.65, scale: 0.96 }}
-                    accessibilityRole="button"
-                    aria-label="Hapus pencarian"
-                  >
-                    <Feather name="x" size={15} color={theme.fgMuted?.val} />
-                  </YStack>
-                ) : null}
-              </XStack>
-
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <XStack gap={8} paddingRight={18}>
-                  {FILTERS.map((item) => (
-                    <FilterButton
-                      key={item.value}
-                      label={item.label}
-                      selected={filter === item.value}
-                      onPress={() => setFilter(item.value)}
-                    />
-                  ))}
-                </XStack>
-              </ScrollView>
-            </YStack>
-
-            <XStack alignItems="center" justifyContent="space-between" marginTop={4}>
-              <Text fontSize={16.5} fontWeight="700" color="$fg">
-                Daftar rekan
-              </Text>
-              <Text fontSize={12} fontWeight="500" color="$fgSubtle">
-                {visible.length} orang
-              </Text>
-            </XStack>
-          </YStack>
+        refreshControl={
+          <RefreshControl
+            refreshing={q.isRefetching && !q.isLoading}
+            onRefresh={() => void q.refetch()}
+          />
         }
-        ListEmptyComponent={
-          q.isPending ? (
-            <TeamSkeleton />
-          ) : q.isError ? (
-            <ErrorNote message={(q.error as Error).message} onRetry={q.refetch} />
-          ) : (
-            <Empty text="Tidak ada rekan yang sesuai pencarian atau filter." />
-          )
-        }
-        renderItem={({ item, index }) => (
-          <XStack
-            minHeight={78}
+        contentContainerStyle={{
+          paddingHorizontal: 20,
+          paddingTop: insets.top + 16,
+          paddingBottom: 142,
+        }}
+      >
+        <XStack alignItems="center" gap={13} marginBottom={28}>
+          <Image
+            source={require("../../../assets/logo-mark.png")}
+            style={{ width: 46, height: 46, borderRadius: 15 }}
+            resizeMode="cover"
+            accessibilityLabel="Logo NanumHR"
+          />
+          <Text
+            flex={1}
+            fontSize={20}
+            lineHeight={25}
+            fontWeight="700"
+            letterSpacing={-0.45}
+            color="$fg"
+          >
+            Peringkat
+          </Text>
+          <YStack
+            width={44}
+            height={44}
+            borderRadius={22}
             alignItems="center"
-            gap={12}
-            paddingHorizontal={14}
-            paddingVertical={12}
+            justifyContent="center"
             backgroundColor="$surface"
             borderWidth={1}
-            borderBottomWidth={index === visible.length - 1 ? 1 : 0}
             borderColor="$line"
-            borderTopLeftRadius={index === 0 ? 24 : 0}
-            borderTopRightRadius={index === 0 ? 24 : 0}
-            borderBottomLeftRadius={index === visible.length - 1 ? 24 : 0}
-            borderBottomRightRadius={index === visible.length - 1 ? 24 : 0}
+            shadowColor="#111827"
+            shadowOpacity={0.07}
+            shadowRadius={10}
+            shadowOffset={{ width: 0, height: 3 }}
+            onPress={() => router.navigate("/")}
+            pressStyle={{ scale: 0.96, opacity: 0.72 }}
+            accessibilityRole="button"
+            aria-label="Buka pengumuman di Beranda"
           >
-            <Avatar
-              seed={item.id}
-              initials={item.initials}
-              photoKey={isFocused ? item.photoKey : null}
-              size={46}
-              borderRadius={16}
+            <Feather name="bell" size={21} color={theme.fg?.val} />
+            <YStack
+              position="absolute"
+              top={9}
+              right={9}
+              width={7}
+              height={7}
+              borderRadius={4}
+              backgroundColor="$accentFill"
+              borderWidth={1.5}
+              borderColor="$surface"
             />
-            <YStack flex={1} gap={3}>
-              <Text fontSize={14.5} lineHeight={19} fontWeight="600" color="$fg">
-                {item.name}
-              </Text>
-              <Text fontSize={11.5} lineHeight={16} color="$fgSubtle">
-                {[item.position, item.detail].filter(Boolean).join(" · ")}
-              </Text>
-            </YStack>
-            <AttBadge status={item.status} />
-          </XStack>
+          </YStack>
+        </XStack>
+
+        <YStack gap={4} marginBottom={16}>
+          <Text
+            fontSize={27}
+            lineHeight={33}
+            fontWeight="700"
+            letterSpacing={-0.8}
+            color="$fg"
+          >
+            Peringkat tim
+          </Text>
+          <Text fontSize={13.5} lineHeight={20} color="$fgMuted">
+            {sub}
+          </Text>
+        </YStack>
+
+        <PeriodTabs value={period} onChange={setPeriod} />
+
+        {hariIni ? <TimHariIni counts={hariIni} /> : null}
+
+        {q.isError ? (
+          <ErrorNote
+            message={(q.error as Error).message}
+            onRetry={() => void q.refetch()}
+          />
+        ) : q.isLoading ? (
+          <YStack gap={12} marginTop={26}>
+            <Skeleton height={150} radius={20} />
+            <Skeleton height={58} radius={16} />
+            <Skeleton height={58} radius={16} />
+            <Skeleton height={58} radius={16} />
+          </YStack>
+        ) : ranked.length === 0 ? (
+          /* penyebutnya nol dan datanya kosong adalah dua sebab berbeda, dan
+             keduanya wajar — kalimatnya menyebut yang mana */
+          <Empty
+            text={
+              q.data?.hariKerja === 0
+                ? "Belum ada hari kerja pada periode ini."
+                : "Belum ada catatan kehadiran pada periode ini."
+            }
+          />
+        ) : (
+          <>
+        <XStack alignItems="flex-end" marginTop={26} marginBottom={28}>
+          {top.map((leader) => (
+            <Podium key={leader.rank} leader={leader} />
+          ))}
+        </XStack>
+
+        <XStack alignItems="center" justifyContent="space-between" marginBottom={9}>
+          <Text fontSize={17} lineHeight={22} fontWeight="700" color="$fg">
+            Peringkat lainnya
+          </Text>
+          <Text
+            fontSize={13}
+            lineHeight={20}
+            fontWeight="600"
+            color="$accent"
+            onPress={() => setPeriod("all")}
+            pressStyle={{ opacity: 0.55 }}
+            accessibilityRole="button"
+            aria-label="Tampilkan peringkat semua waktu"
+          >
+            Lihat semua
+          </Text>
+        </XStack>
+
+        <YStack borderTopWidth={1} borderTopColor="$line">
+          {ranked.slice(3).map((leader, index) => (
+            <Baris
+              key={leader.id}
+              leader={leader}
+              aku={leader.id === current?.id}
+              last={index === ranked.length - 4}
+            />
+          ))}
+        </YStack>
+          </>
         )}
-      />
-      <StickyHeader shown={bar.shown} title="Kehadiran tim" />
+      </ScrollView>
+
+      {current ? (
+        <CurrentUserCard leader={current} dari={q.data!.peringkatDari} />
+      ) : null}
+      <StickyHeader shown={bar.shown} title="Peringkat" />
     </Screen>
   );
 }
 
-function Summary({ label, value, tone }: { label: string; value: number; tone: string }) {
+/**
+ * Ringkasan kehadiran seluruh karyawan HARI INI.
+ *
+ * Inilah yang dipertahankan dari papan "Kehadiran Tim" yang dulu menempati tab
+ * ini: yang berguna sehari-hari adalah "berapa banyak", bukan "siapa" — dan
+ * "siapa" sudah ada di konsol HR.
+ *
+ * Keempatnya nol berarti hari ini bukan hari kerja siapa pun (akhir pekan atau
+ * libur nasional). Itu keadaan yang sah, dan menampilkan empat angka nol tanpa
+ * penjelasan akan terbaca seperti gagal memuat.
+ */
+function TimHariIni({
+  counts,
+}: {
+  counts: { hadir: number; telat: number; izin: number; belum: number };
+}) {
+  const total = counts.hadir + counts.telat + counts.izin + counts.belum;
+  const items = [
+    { label: "Hadir", value: counts.hadir, color: "$success" as const },
+    { label: "Telat", value: counts.telat, color: "$warning" as const },
+    { label: "Izin", value: counts.izin, color: "$accent" as const },
+    { label: "Belum", value: counts.belum, color: "$fgMuted" as const },
+  ];
+
   return (
-    <YStack flex={1} backgroundColor="$surface2" borderRadius={16} padding={11} gap={3}>
-      <Mono fontSize={17} lineHeight={21} fontWeight="700" color={tone}>
-        {value}
-      </Mono>
-      <Text fontSize={10.5} lineHeight={14} color="$fgMuted">
-        {label}
+    <YStack
+      marginTop={16}
+      borderRadius={16}
+      borderWidth={1}
+      borderColor="$line"
+      backgroundColor="$surface"
+      paddingVertical={11}
+      paddingHorizontal={14}
+    >
+      <Text fontSize={11.5} lineHeight={16} fontWeight="600" color="$fgMuted" marginBottom={8}>
+        Tim hari ini
       </Text>
+      {total === 0 ? (
+        <Text fontSize={13} lineHeight={18} color="$fgMuted">
+          Hari ini bukan hari kerja.
+        </Text>
+      ) : (
+        <XStack>
+          {items.map((it) => (
+            <YStack key={it.label} flex={1} gap={1}>
+              <Mono fontSize={18} lineHeight={22} fontWeight="700" color={it.color}>
+                {it.value}
+              </Mono>
+              <Text fontSize={11} lineHeight={15} color="$fgMuted">
+                {it.label}
+              </Text>
+            </YStack>
+          ))}
+        </XStack>
+      )}
     </YStack>
   );
 }
 
-function FilterButton({
-  label,
-  selected,
-  onPress,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-}) {
+function PeriodTabs({ value, onChange }: { value: Period; onChange: (period: Period) => void }) {
   return (
-    <XStack
-      minHeight={38}
-      alignItems="center"
-      borderRadius={19}
-      paddingHorizontal={15}
-      backgroundColor={selected ? "$accentFill" : "$surface"}
-      borderWidth={selected ? 0 : 1}
-      borderColor="$lineStrong"
-      onPress={onPress}
-      pressStyle={{ opacity: 0.72, scale: 0.98 }}
-      accessibilityRole="button"
-      aria-selected={selected}
-    >
-      <Text fontSize={12.5} fontWeight="600" color={selected ? "$accentFg" : "$fgMuted"}>
-        {label}
-      </Text>
+    <XStack height={48} padding={4} borderRadius={18} backgroundColor="$inset" gap={3}>
+      {PERIODS.map((item) => {
+        const selected = value === item.value;
+        return (
+          <YStack
+            key={item.value}
+            flex={1}
+            borderRadius={14}
+            alignItems="center"
+            justifyContent="center"
+            backgroundColor={selected ? "$surface" : "transparent"}
+            shadowColor="#14161b"
+            shadowOpacity={selected ? 0.06 : 0}
+            shadowRadius={selected ? 7 : 0}
+            shadowOffset={{ width: 0, height: 2 }}
+            onPress={() => onChange(item.value)}
+            pressStyle={{ scale: 0.98, opacity: 0.72 }}
+            accessibilityRole="button"
+            aria-selected={selected}
+          >
+            <Text
+              fontSize={13}
+              fontWeight={selected ? "700" : "500"}
+              color={selected ? "$accent" : "$fgMuted"}
+            >
+              {item.label}
+            </Text>
+          </YStack>
+        );
+      })}
     </XStack>
   );
 }
 
-function TeamSkeleton() {
+function Podium({ leader }: { leader: LeaderboardRow }) {
+  const winner = leader.rank === 1;
+  const avatarSize = winner ? 94 : 72;
+
   return (
-    <YStack borderRadius={24} overflow="hidden" borderWidth={1} borderColor="$line">
-      {[0, 1, 2, 3, 4].map((item) => (
-        <XStack
-          key={item}
-          minHeight={78}
-          alignItems="center"
-          gap={12}
-          padding={14}
-          backgroundColor="$surface"
-          borderBottomWidth={item === 4 ? 0 : 1}
-          borderBottomColor="$line"
-        >
-          <Skeleton width={46} height={46} radius={16} />
-          <YStack flex={1} gap={8}>
-            <Skeleton width="62%" height={12} />
-            <Skeleton width="82%" height={9} />
-          </YStack>
-          <Skeleton width={54} height={26} radius={13} />
+    <YStack flex={1} alignItems="center" paddingHorizontal={3}>
+      <YStack alignItems="center" marginBottom={16}>
+        {winner ? (
+          <Image
+            source={CROWN}
+            style={{ width: 36, height: 24, marginBottom: 6 }}
+            resizeMode="contain"
+            accessibilityLabel="Mahkota peringkat pertama"
+          />
+        ) : (
+          <YStack height={30} />
+        )}
+        {winner ? (
+          <Image
+            source={SPRINKLES}
+            style={{
+              position: "absolute",
+              top: 22,
+              width: 142,
+              height: 80,
+            }}
+            resizeMode="contain"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          />
+        ) : null}
+        <Avatar
+          seed={leader.id}
+          initials={leader.initials}
+          photoKey={leader.photoKey}
+          size={avatarSize}
+          borderRadius={winner ? 29 : 23}
+          borderWidth={winner ? 1.5 : 1}
+          borderColor={winner ? "$accentLine" : "$line"}
+        />
+        <Medal rank={leader.rank} />
+      </YStack>
+      <Text
+        maxWidth="100%"
+        fontSize={winner ? 16 : 14}
+        lineHeight={20}
+        fontWeight="700"
+        letterSpacing={-0.3}
+        color="$fg"
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
+        {leader.name}
+      </Text>
+      <XStack alignItems="baseline" justifyContent="center" gap={3} marginTop={4}>
+        <Mono fontSize={winner ? 17 : 15} lineHeight={22} fontWeight="700" color="$accent">
+          {POINT_FORMAT.format(leader.poin)}
+        </Mono>
+        <Text fontSize={11.5} color="$fgMuted">
+          poin
+        </Text>
+      </XStack>
+    </YStack>
+  );
+}
+
+function Medal({ rank }: { rank: number }) {
+  const place = rank as 1 | 2 | 3;
+  const textColor = place === 1 ? "#7a4b00" : place === 2 ? "#475467" : "#713515";
+
+  return (
+    <YStack
+      position="absolute"
+      bottom={-20}
+      width={42}
+      height={46}
+      alignItems="center"
+    >
+      <Image
+        source={MEDALS[place]}
+        style={{ position: "absolute", width: 42, height: 46 }}
+        resizeMode="contain"
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      />
+      <Mono marginTop={10} fontSize={14} lineHeight={18} fontWeight="700" color={textColor}>
+        {rank}
+      </Mono>
+    </YStack>
+  );
+}
+
+function Baris({
+  leader,
+  aku,
+  last,
+}: {
+  leader: LeaderboardRow;
+  aku: boolean;
+  last: boolean;
+}) {
+  return (
+    <XStack
+      minHeight={68}
+      alignItems="center"
+      gap={12}
+      borderBottomWidth={last ? 0 : 1}
+      borderBottomColor="$line"
+      paddingVertical={10}
+      // baris sendiri disorot, bukan disembunyikan: kartu di bawah adalah
+      // ringkasan, dan orang tetap perlu melihat posisinya di antara tetangganya
+      backgroundColor={aku ? "$accentSubtle" : "transparent"}
+    >
+      <Mono width={22} fontSize={17} lineHeight={22} fontWeight="700" color="$fg">
+        {leader.rank}
+      </Mono>
+      <Avatar
+        seed={leader.id}
+        initials={leader.initials}
+        photoKey={leader.photoKey}
+        size={44}
+        borderRadius={14}
+      />
+      <YStack flex={1} gap={2}>
+        <Text fontSize={14} lineHeight={18} fontWeight="600" color="$fg" numberOfLines={1}>
+          {leader.name}
+        </Text>
+        <Text fontSize={11.5} lineHeight={16} color="$fgMuted">
+          {leader.tepatWaktu} hari tepat waktu
+        </Text>
+      </YStack>
+      <XStack alignItems="baseline" gap={3}>
+        <Mono fontSize={15.5} lineHeight={20} fontWeight="700" color="$fg">
+          {POINT_FORMAT.format(leader.poin)}
+        </Mono>
+        <Text fontSize={11} color="$fgMuted">
+          poin
+        </Text>
+      </XStack>
+    </XStack>
+  );
+}
+
+function CurrentUserCard({
+  leader,
+  dari,
+}: {
+  leader: LeaderboardRow;
+  dari: number;
+}) {
+  return (
+    <YStack
+      position="absolute"
+      left={16}
+      right={16}
+      bottom={10}
+      borderRadius={22}
+      borderWidth={1}
+      borderColor="$accentLine"
+      backgroundColor="$surface"
+      paddingHorizontal={14}
+      paddingTop={10}
+      paddingBottom={11}
+      shadowColor="#101828"
+      shadowOpacity={0.12}
+      shadowRadius={16}
+      shadowOffset={{ width: 0, height: 6 }}
+    >
+      <Text fontSize={12.5} lineHeight={17} fontWeight="700" color="$accent" marginBottom={7}>
+        Peringkat kamu
+      </Text>
+      <XStack alignItems="center" gap={11}>
+        <Mono width={20} fontSize={17} fontWeight="700" color="$fg">
+          {leader.rank}
+        </Mono>
+        <Avatar
+          seed={leader.id}
+          initials={leader.initials}
+          photoKey={leader.photoKey}
+          size={42}
+          borderRadius={14}
+        />
+        <YStack flex={1} gap={2}>
+          <Text fontSize={14} lineHeight={18} fontWeight="700" color="$fg" numberOfLines={1}>
+            {leader.name}
+          </Text>
+          <Text fontSize={11.5} color="$fgMuted">
+            {leader.tepatWaktu} hari tepat waktu
+          </Text>
+        </YStack>
+        <XStack alignItems="baseline" gap={3}>
+          <Mono fontSize={16} lineHeight={21} fontWeight="700" color="$fg">
+            {POINT_FORMAT.format(leader.poin)}
+          </Mono>
+          <Text fontSize={11} color="$fgMuted">
+            poin
+          </Text>
         </XStack>
-      ))}
+      </XStack>
+      {/* Seberapa jauh di atas yang lain — bukan angka hias. Peringkat 1 dari 15
+          mengisi penuh, peringkat terakhir hampir kosong. */}
+      <YStack
+        height={4}
+        borderRadius={2}
+        backgroundColor="$inset"
+        overflow="hidden"
+        marginTop={9}
+        marginLeft={31}
+      >
+        <YStack
+          width={`${Math.round(((dari - leader.rank + 1) / Math.max(dari, 1)) * 100)}%`}
+          height="100%"
+          borderRadius={2}
+          backgroundColor="$accentFill"
+        />
+      </YStack>
     </YStack>
   );
 }

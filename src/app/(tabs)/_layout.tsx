@@ -164,8 +164,10 @@ export default function TabLayout() {
       <Tabs.Screen
         name="tim"
         options={{
-          title: "Tim",
-          tabBarIcon: ({ color }) => <Feather name="users" size={22} color={color} />,
+          // rutenya tetap "tim" — mengganti nama berkasnya akan memutus setiap
+          // tautan dalam yang sudah menunjuk ke sana; yang berubah hanya labelnya
+          title: "Peringkat",
+          tabBarIcon: ({ color }) => <Feather name="award" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
