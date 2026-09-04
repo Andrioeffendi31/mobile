@@ -103,6 +103,16 @@ export function jarakMeter(aLat: number, aLng: number, bLat: number, bLng: numbe
 }
 
 /** Today + `days`, as YYYY-MM-DD — the date inputs' defaults. */
+/**
+ * Sejauh apa pengajuan cuti boleh menyebut tanggal yang sudah lewat.
+ *
+ * CERMIN dari `MAKS_MUNDUR_HARI` di web/src/lib/hr.ts, yang menegakkannya di
+ * server. Angka ini hanya membatasi pemilih tanggal supaya orang tidak memilih
+ * hari yang pasti ditolak; kalau keduanya berbeda, yang berlaku tetap yang di
+ * server — dan yang salah adalah yang di sini.
+ */
+export const MAKS_MUNDUR_HARI = 30;
+
 export function plusHari(days: number, from = todayWib()) {
   const d = utc(from);
   d.setUTCDate(d.getUTCDate() + days);

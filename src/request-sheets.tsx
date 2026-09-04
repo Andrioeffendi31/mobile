@@ -7,10 +7,24 @@ import { ScrollView, Text, XStack, YStack } from "tamagui";
 import { tint } from "@/theme";
 import { API, type RequestItem, get, postForm, postJson } from "@/api";
 import { DateInput, TimeInput } from "@/date-input";
-import { durasiJam, hariKerjaPreview, menitAntara, plusHari, tanggalPanjang, todayWib } from "@/format";
+import { MAKS_MUNDUR_HARI, durasiJam, hariKerjaPreview, menitAntara, plusHari, tanggalPanjang, todayWib } from "@/format";
 import { toast } from "@/toast";
 import { Btn, Field, Note, Readout, ReqBadge, SheetShell, TextArea } from "@/ui";
 import { siapkanUnggahan } from "@/image";
+
+/**
+ * Tanggal paling awal yang boleh dipilih untuk cuti.
+ *
+ * Bukan `new Date()` lagi: cuti sakit dan izin mendadak justru baru bisa
+ * dilaporkan sesudah harinya lewat, dan sebelum ini pemilihnya menutup satu-
+ * satunya kasus yang paling sering terjadi. Servernya yang menegakkan batas
+ * sesungguhnya; ini hanya mencegah orang memilih tanggal yang pasti ditolak.
+ */
+const batasMundur = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - MAKS_MUNDUR_HARI);
+  return d;
+};
 
 /**
  * The two request forms (PRD-Mobile §6.3).
@@ -322,7 +336,7 @@ export function LeaveSheet({
             <DateInput
               value={start}
               onChange={setStart}
-              minimumDate={new Date()}
+              minimumDate={batasMundur()}
               disabled={!editable}
             />
           </Field>
@@ -354,7 +368,7 @@ export function LeaveSheet({
               <DateInput
                 value={start}
                 onChange={setStart}
-                minimumDate={new Date()}
+                minimumDate={batasMundur()}
                 disabled={!editable}
               />
             </Field>
