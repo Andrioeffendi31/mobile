@@ -1,16 +1,16 @@
 import { useCallback, useState } from "react";
 import { Image, RefreshControl, type ImageSourcePropType } from "react-native";
-import { Feather } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ScrollView, Text, XStack, YStack, useTheme } from "tamagui";
+import { ScrollView, Text, XStack, YStack } from "tamagui";
 import { type Leaderboard, type LeaderboardRow, get } from "@/api";
 import {
   Avatar,
   Empty,
   ErrorNote,
   Mono,
+  PageIntro,
   Screen,
   Skeleton,
   StickyHeader,
@@ -50,10 +50,10 @@ const POINT_FORMAT = new Intl.NumberFormat("id-ID");
  */
 export default function Tim() {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
-  const theme = useTheme();
   const [period, setPeriod] = useState<Period>("week");
-  const bar = useStickyHeader(72);
+  /* 56, sama dengan Pengaturan: ambangnya seukuran judul besar yang digantikan,
+     bukan angka yang menyisakan ruang di atasnya. */
+  const bar = useStickyHeader(56);
 
   const q = useQuery({
     queryKey: ["leaderboard", period],
@@ -96,73 +96,14 @@ export default function Tim() {
         }
         contentContainerStyle={{
           paddingHorizontal: 20,
-          paddingTop: insets.top + 16,
+          paddingTop: insets.top + 18,
           paddingBottom: 142,
         }}
       >
-        <XStack alignItems="center" gap={13} marginBottom={28}>
-          <Image
-            source={require("../../../assets/logo-mark.png")}
-            style={{ width: 46, height: 46, borderRadius: 15 }}
-            resizeMode="cover"
-            accessibilityLabel="Logo NanumHR"
-          />
-          <Text
-            flex={1}
-            fontSize={20}
-            lineHeight={25}
-            fontWeight="700"
-            letterSpacing={-0.45}
-            color="$fg"
-          >
-            Peringkat
-          </Text>
-          <YStack
-            width={44}
-            height={44}
-            borderRadius={22}
-            alignItems="center"
-            justifyContent="center"
-            backgroundColor="$surface"
-            borderWidth={1}
-            borderColor="$line"
-            shadowColor="#111827"
-            shadowOpacity={0.07}
-            shadowRadius={10}
-            shadowOffset={{ width: 0, height: 3 }}
-            onPress={() => router.navigate("/")}
-            pressStyle={{ scale: 0.96, opacity: 0.72 }}
-            accessibilityRole="button"
-            aria-label="Buka pengumuman di Beranda"
-          >
-            <Feather name="bell" size={21} color={theme.fg?.val} />
-            <YStack
-              position="absolute"
-              top={9}
-              right={9}
-              width={7}
-              height={7}
-              borderRadius={4}
-              backgroundColor="$accentFill"
-              borderWidth={1.5}
-              borderColor="$surface"
-            />
-          </YStack>
-        </XStack>
-
-        <YStack gap={4} marginBottom={16}>
-          <Text
-            fontSize={27}
-            lineHeight={33}
-            fontWeight="700"
-            letterSpacing={-0.8}
-            color="$fg"
-          >
-            Peringkat tim
-          </Text>
-          <Text fontSize={13.5} lineHeight={20} color="$fgMuted">
-            {sub}
-          </Text>
+        {/* PageIntro yang sama dengan Kehadiran — dua layar dengan bentuk yang
+            sama tidak boleh punya dua judul besar yang ukurannya beda tipis. */}
+        <YStack marginBottom={16}>
+          <PageIntro title="Peringkat tim" subtitle={sub} />
         </YStack>
 
         <PeriodTabs value={period} onChange={setPeriod} />
@@ -234,7 +175,7 @@ export default function Tim() {
       {current ? (
         <CurrentUserCard leader={current} dari={q.data!.peringkatDari} />
       ) : null}
-      <StickyHeader shown={bar.shown} title="Peringkat" />
+      <StickyHeader shown={bar.shown} title="Peringkat tim" />
     </Screen>
   );
 }
