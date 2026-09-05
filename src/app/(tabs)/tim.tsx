@@ -35,6 +35,10 @@ const MEDALS: Record<1 | 2 | 3, ImageSourcePropType> = {
 
 const POINT_FORMAT = new Intl.NumberFormat("id-ID");
 
+/** Padding kiri-kanan isi layar. Dipakai juga oleh sorotan baris sendiri, yang
+ *  harus menembusnya sampai ke tepi — dua angka yang wajib sama. */
+const PADDING_LAYAR = 20;
+
 /**
  * Papan peringkat kehadiran.
  *
@@ -104,7 +108,7 @@ export default function Tim() {
           />
         }
         contentContainerStyle={{
-          paddingHorizontal: 20,
+          paddingHorizontal: PADDING_LAYAR,
           paddingTop: insets.top + 18,
           paddingBottom: 142,
         }}
@@ -393,11 +397,24 @@ function Baris({
       borderBottomWidth={last ? 0 : 1}
       borderBottomColor="$line"
       paddingVertical={10}
-      // baris sendiri disorot, bukan disembunyikan: kartu di bawah adalah
-      // ringkasan, dan orang tetap perlu melihat posisinya di antara tetangganya
+      /**
+       * Baris sendiri disorot, bukan disembunyikan: kartu di bawah adalah
+       * ringkasan, dan orang tetap perlu melihat posisinya di antara
+       * tetangganya.
+       *
+       * Sorotannya menembus padding halaman (marginHorizontal negatif, lalu
+       * dibayar kembali sebagai padding): warna yang berhenti 20px dari tepi
+       * terbaca sebagai kotak yang salah ukur, bukan sebagai baris yang
+       * ditandai. Angkanya wajib sama dengan `paddingHorizontal` pada
+       * contentContainerStyle di atas.
+       */
+      marginHorizontal={aku ? -PADDING_LAYAR : 0}
+      paddingHorizontal={aku ? PADDING_LAYAR : 0}
       backgroundColor={aku ? "$accentSubtle" : "transparent"}
     >
-      <Mono width={22} fontSize={17} lineHeight={22} fontWeight="700" color="$fg">
+      {/* minWidth, bukan width: peringkat tiga digit tidak boleh terlipat jadi
+          dua baris begitu karyawannya lewat seratus orang */}
+      <Mono minWidth={22} fontSize={17} lineHeight={22} fontWeight="700" color="$fg" numberOfLines={1}>
         {leader.rank}
       </Mono>
       <Avatar
@@ -456,7 +473,8 @@ function CurrentUserCard({
         Peringkat kamu
       </Text>
       <XStack alignItems="center" gap={11}>
-        <Mono width={20} fontSize={17} fontWeight="700" color="$fg">
+        {/* minWidth 20, bukan width: "26" tidak muat dan terlipat jadi dua baris */}
+        <Mono minWidth={20} fontSize={17} fontWeight="700" color="$fg" numberOfLines={1}>
           {leader.rank}
         </Mono>
         <Avatar
