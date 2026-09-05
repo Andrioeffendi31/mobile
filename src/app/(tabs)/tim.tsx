@@ -82,8 +82,17 @@ export default function Tim() {
   const hariIni = q.data?.hariIni;
   const sub = PERIODS.find((p) => p.value === period)!.sub;
 
+  /**
+   * Latar bawaan Screen ($bg), bukan $surface.
+   *
+   * Layar ini satu-satunya tab yang dulu menimpanya jadi putih — warisan
+   * rancangan dummy — dan itu membuat StickyHeader di bawah, yang memakai $bg,
+   * tampil sebagai strip ABU di atas halaman PUTIH: terlihat seperti bar asing,
+   * bukan seperti kepala halaman itu sendiri. Kartu di dalamnya sudah $surface,
+   * jadi kontrasnya justru benar di atas $bg — sama seperti Pengaturan.
+   */
   return (
-    <Screen backgroundColor="$surface">
+    <Screen>
       <ScrollView
         onScroll={bar.onScroll}
         scrollEventThrottle={bar.scrollEventThrottle}
