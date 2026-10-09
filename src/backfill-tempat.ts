@@ -40,7 +40,13 @@ function label(tempat: Location.LocationGeocodedAddress): string | null {
   return teks ? teks.slice(0, 120) : null;
 }
 
+/** Tiap kembali ke depan memanggil ini; 30 menit cukup untuk ping tiap ~3 jam. */
+const JEDA_BACKFILL_MS = 30 * 60 * 1000;
+let terakhir = 0;
+
 export async function backfillNamaTempat(): Promise<number> {
+  if (Date.now() - terakhir < JEDA_BACKFILL_MS) return 0;
+  terakhir = Date.now();
   // izin FOREGROUND yang diminta geocoder Android, bukan background
   const izin = await Location.getForegroundPermissionsAsync().catch(() => null);
   if (!izin?.granted) return 0;

@@ -432,7 +432,8 @@ function Trail({ cookie }: { cookie: string | null }) {
     const sub = AppState.addEventListener("change", (state) => {
       if (state !== "active" || !cookie) return;
       // clock-out bisa terjadi di konsol web selagi telepon tidur
-      void qc.invalidateQueries({ queryKey: ["me"] });
+      // stale saja: kembali dari kamera/dialog izin tidak perlu bootstrap baru
+      void qc.refetchQueries({ queryKey: ["me"], stale: true });
       // The fresh query drives the reconciliation effect. Calling `rukun` here
       // too used stale attendance state and duplicated location work whenever a
       // camera/settings activity returned to the app.

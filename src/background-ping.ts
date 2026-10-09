@@ -116,7 +116,7 @@ async function bacaBootstrap(cookie: string): Promise<BootstrapRead> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), WATCHDOG_TIMEOUT_MS);
   try {
-    const res = await fetch(`${API}/api/me`, {
+    const res = await fetch(`${API}/api/me/today`, {
       signal: controller.signal,
       headers: { cookie },
     });
@@ -676,6 +676,10 @@ export async function reconcileBackgroundPingFromServer(opsi: { forceCatchUp?: b
     await clearQueue();
     return;
   }
+  // Belum absen masuk di ponsel ini: tidak ada jejak untuk diselaraskan, jadi
+  // tidak ada yang perlu ditanyakan ke server. Tanpa ini watchdog 15 menit
+  // memanggil server sepanjang malam dari tiap ponsel yang sedang login.
+  if (!masukTersimpan(await bacaStatus())) return;
 
   const bootstrap = await bacaBootstrap(cookie);
   if (bootstrap.kind === "unauthorized") {
